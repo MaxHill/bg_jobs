@@ -1,5 +1,5 @@
-import bg_jobs/job
-import bg_jobs/queue
+import bg_jobs
+import chip
 import gleam/dynamic
 import gleam/erlang/process
 import gleam/json
@@ -13,20 +13,23 @@ pub type Payload {
 }
 
 pub fn worker(logger: process.Subject(test_logger.LogMessage)) {
-  queue.Worker(job_name: job_name, execute: execute(logger, _))
+  bg_jobs.Worker(job_name: job_name, execute: execute(logger, _))
 }
 
-pub fn execute(logger: process.Subject(test_logger.LogMessage), job: job.Job) {
+pub fn execute(
+  logger: process.Subject(test_logger.LogMessage),
+  job: bg_jobs.Job,
+) {
   let assert Ok(Payload(payload)) = from_string(job.payload)
   test_logger.log_message(logger)(payload)
   Ok(Nil)
 }
 
 pub fn dispatch(
-  queue: process.Subject(queue.Message(Payload)),
+  queues: process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
   payload: Payload,
 ) {
-  queue.enqueue_job(queue, job_name, to_string(payload))
+  bg_jobs.enqueue_job(queues, job_name, to_string(payload))
 }
 
 pub fn to_string(log_payload: Payload) {

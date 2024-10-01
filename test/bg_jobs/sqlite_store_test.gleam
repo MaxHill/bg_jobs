@@ -1,16 +1,11 @@
 import bg_jobs
-import bg_jobs/job
 import bg_jobs/sqlite_store
-import birdie
 import birl
+import gleam/dynamic
 import gleam/list
 import gleam/order
 import gleeunit/should
-import pprint
 import sqlight
-import test_helpers
-
-const queue_name = "test-queue"
 
 const job_name = "test-job"
 
@@ -18,12 +13,11 @@ const job_payload = "test-payload"
 
 pub fn enqueue_job_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = bg_jobs.migrate_down(conn)
-  let assert Ok(_) = bg_jobs.migrate_up(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(returned_job) =
-    job_store.enqueue_job(queue_name, job_name, job_payload)
+  let assert Ok(returned_job) = job_store.enqueue_job(job_name, job_payload)
 
   let assert Ok(jobs) =
     sqlight.query(
@@ -42,7 +36,7 @@ pub fn enqueue_job_test() {
   |> fn(job) {
     should.equal(returned_job, job)
 
-    validate_job(job, queue_name, job_name, job_payload)
+    validate_job(job, job_name, job_payload)
 
     job.reserved_at
     |> should.be_none
@@ -51,27 +45,25 @@ pub fn enqueue_job_test() {
 
 pub fn get_next_jobs_limit_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = bg_jobs.migrate_down(conn)
-  let assert Ok(_) = bg_jobs.migrate_up(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(_returned_job1) =
-    job_store.enqueue_job(queue_name, job_name, job_payload)
+  let assert Ok(_returned_job1) = job_store.enqueue_job(job_name, job_payload)
 
-  let assert Ok(_returned_job2) =
-    job_store.enqueue_job(queue_name, job_name <> "2", job_payload)
+  let assert Ok(_returned_job2) = job_store.enqueue_job(job_name, job_payload)
 
-  job_store.get_next_jobs(queue_name, 1)
+  job_store.get_next_jobs([job_name], 1)
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.get_next_jobs(queue_name, 1)
+  job_store.get_next_jobs([job_name], 1)
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.get_next_jobs(queue_name, 1)
+  job_store.get_next_jobs([job_name], 1)
   |> should.be_ok
   |> list.length
   |> should.equal(0)
@@ -79,18 +71,18 @@ pub fn get_next_jobs_limit_test() {
 
 pub fn get_next_jobs_returned_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = bg_jobs.migrate_down(conn)
-  let assert Ok(_) = bg_jobs.migrate_up(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(_) = job_store.enqueue_job(queue_name, job_name, job_payload)
+  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
 
-  job_store.get_next_jobs(queue_name, 1)
+  job_store.get_next_jobs([job_name], 1)
   |> should.be_ok
   |> list.first
   |> should.be_ok
   |> fn(job) {
-    validate_job(job, queue_name, job_name, job_payload)
+    validate_job(job, job_name, job_payload)
 
     job.reserved_at
     |> should.be_some
@@ -99,10 +91,11 @@ pub fn get_next_jobs_returned_test() {
 
 pub fn move_job_to_success_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = test_helpers.reset_db(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(job) = job_store.enqueue_job(queue_name, job_name, job_payload)
+  let assert Ok(job) = job_store.enqueue_job(job_name, job_payload)
 
   job_store.move_job_to_succeded(job)
   |> should.be_ok
@@ -127,9 +120,8 @@ pub fn move_job_to_success_test() {
   |> list.first
   |> should.be_ok
   |> should.be_ok
-  |> should.equal(job.SucceededJob(
+  |> should.equal(bg_jobs.SucceededJob(
     id: job.id,
-    queue: job.queue,
     name: job.name,
     payload: job.payload,
     attempts: job.attempts,
@@ -141,10 +133,11 @@ pub fn move_job_to_success_test() {
 
 pub fn move_job_to_failed_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = test_helpers.reset_db(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(job) = job_store.enqueue_job(queue_name, job_name, job_payload)
+  let assert Ok(job) = job_store.enqueue_job(job_name, job_payload)
 
   job_store.move_job_to_failed(job, "test exception")
   |> should.be_ok
@@ -169,9 +162,8 @@ pub fn move_job_to_failed_test() {
   |> list.first
   |> should.be_ok
   |> should.be_ok
-  |> should.equal(job.FailedJob(
+  |> should.equal(bg_jobs.FailedJob(
     id: job.id,
-    queue: job.queue,
     name: job.name,
     payload: job.payload,
     attempts: job.attempts,
@@ -184,14 +176,14 @@ pub fn move_job_to_failed_test() {
 
 pub fn get_succeeded_jobs_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = test_helpers.reset_db(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_) =
     sqlight.exec(
       "INSERT INTO jobs_succeeded (
       id, 
-      queue, 
       name, 
       payload, 
       attempts, 
@@ -201,7 +193,6 @@ pub fn get_succeeded_jobs_test() {
     )
     VALUES (
       'job_12345',                                 
-      'default',                                   
       'process_order',                             
       '\"test-payload\"',       
       3,                                           
@@ -214,20 +205,30 @@ pub fn get_succeeded_jobs_test() {
     )
 
   job_store.get_succeeded_jobs(1)
-  |> pprint.format
-  |> birdie.snap(title: "Get succeeded job from db")
+  |> should.be_ok
+  |> should.equal([
+    bg_jobs.SucceededJob(
+      "job_12345",
+      "process_order",
+      "\"test-payload\"",
+      3,
+      #(#(2024, 09, 29), #(10, 30, 00)),
+      #(#(2024, 09, 29), #(10, 30, 00)),
+      #(#(2024, 09, 29), #(11, 00, 00)),
+    ),
+  ])
 }
 
 pub fn get_failed_jobs_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = test_helpers.reset_db(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_) =
     sqlight.exec(
       "INSERT INTO jobs_failed (
       id, 
-      queue, 
       name, 
       payload, 
       attempts, 
@@ -238,7 +239,6 @@ pub fn get_failed_jobs_test() {
     )
     VALUES (
       'job_12345',                                 
-      'default',                                   
       'process_order',                             
       '\"test-payload\"',       
       3,                                           
@@ -252,16 +252,28 @@ pub fn get_failed_jobs_test() {
     )
 
   job_store.get_failed_jobs(1)
-  |> pprint.format
-  |> birdie.snap(title: "Get failed job from db")
+  |> should.be_ok
+  |> should.equal([
+    bg_jobs.FailedJob(
+      "job_12345",
+      "process_order",
+      "\"test-payload\"",
+      3,
+      "Test exception",
+      #(#(2024, 9, 29), #(10, 30, 0)),
+      #(#(2024, 9, 29), #(10, 30, 0)),
+      #(#(2024, 9, 29), #(11, 0, 0)),
+    ),
+  ])
 }
 
 pub fn increment_attempts_test() {
   use conn <- sqlight.with_connection("dispatch")
-  let assert Ok(_) = test_helpers.reset_db(conn)
   let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(job) = job_store.enqueue_job(queue_name, job_name, job_payload)
+  let assert Ok(job) = job_store.enqueue_job(job_name, job_payload)
 
   job_store.increment_attempts(job)
   |> should.be_ok
@@ -269,16 +281,64 @@ pub fn increment_attempts_test() {
   |> should.equal(1)
 }
 
-// Helpers
-fn validate_job(
-  job: job.Job,
-  queue_name: String,
-  job_name: String,
-  job_payload: String,
-) {
-  job.queue
-  |> should.equal(queue_name)
+pub fn migrate_test() {
+  use conn <- sqlight.with_connection(":memory:")
 
+  let assert Ok(_) = sqlite_store.migrate_up(conn)()
+
+  let sql =
+    "
+    SELECT name 
+    FROM sqlite_master 
+    WHERE type = 'table';"
+
+  sqlight.query(
+    sql,
+    conn,
+    [],
+    dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
+  )
+  |> should.be_ok
+  |> should.equal(["jobs", "jobs_failed", "jobs_succeeded"])
+
+  let assert Ok(_) = sqlite_store.migrate_down(conn)()
+  sqlight.query(
+    sql,
+    conn,
+    [],
+    dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
+  )
+  |> should.be_ok
+  |> should.equal([])
+}
+
+pub fn empty_list_of_jobs_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
+
+  job_store.get_next_jobs(["job_name"], 3)
+  |> should.be_ok
+}
+
+pub fn multiple_list_of_jobs_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  let job_store = sqlite_store.try_new_store(conn)
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
+
+  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
+  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
+  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
+  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
+
+  job_store.get_next_jobs(["job_name"], 3)
+  |> should.be_ok
+}
+
+// Helpers
+fn validate_job(job: bg_jobs.Job, job_name: String, job_payload: String) {
   job.name
   |> should.equal(job_name)
 
