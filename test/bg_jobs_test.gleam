@@ -2,7 +2,6 @@ import bg_jobs
 import bg_jobs/sqlite_store
 import chip
 import gleam/erlang/process
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/result
@@ -137,14 +136,28 @@ pub fn handle_no_worker_found_test() {
   // Need to manually trigger this now
   let assert Ok(queue) = chip.find(queue_store, "default_queue")
   bg_jobs.process_jobs(queue)
+
   process.sleep(100)
 
   // Make sure one of the jobs worked
   test_logger.get_log(logger)
   |> should.equal(["testing"])
+
+  // Make sure the failed job is available
+  db_adapter.get_failed_jobs(1)
+  |> should.be_ok
+  |> list.first
+  |> should.be_ok
+  |> fn(job) {
+    job.name
+    |> should.equal("DOES_NOT_EXIST")
+
+    job.exception
+    |> should.equal("Could not find worker for job")
+  }
 }
 
-pub fn handle_panic_test() {
+pub fn keep_going_after_panic_test() {
   use conn <- sqlight.with_connection(":memory:")
   let bad_adapter =
     bg_jobs.DbAdapter(

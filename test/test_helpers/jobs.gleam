@@ -1,7 +1,6 @@
 import bg_jobs
 import bg_jobs/sqlite_store
 import chip
-import gleam/otp/supervisor
 import sqlight
 import test_helpers/jobs/failing_job
 import test_helpers/jobs/log_job

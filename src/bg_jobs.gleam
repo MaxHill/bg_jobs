@@ -1,3 +1,4 @@
+import birl
 import chip
 import gleam/erlang/process
 import gleam/function
@@ -399,8 +400,24 @@ fn handle_queue_message(
           process.send(client, job)
         }
         Error(_) -> {
-          let err = Error(DispatchJobError("No worker for job: " <> job_name))
-          process.send(client, err)
+          let job =
+            Job(
+              id: "",
+              name: job_name,
+              payload: payload,
+              attempts: 0,
+              created_at: birl.to_erlang_universal_datetime(birl.now()),
+              available_at: birl.to_erlang_universal_datetime(birl.now()),
+              reserved_at: option.None,
+            )
+          actor.send(
+            state.self,
+            HandleError(job, "Could not find worker for job"),
+          )
+          process.send(
+            client,
+            Error(DispatchJobError("No worker for job: " <> job_name)),
+          )
         }
       }
       actor.continue(state)
