@@ -1,0 +1,19 @@
+---
+version: 1.2.3
+title: Get failed job from db
+file: ./test/bg_jobs/sqlite_store_test.gleam
+test_name: get_failed_jobs_test
+---
+Ok([
+  FailedJob(
+    "job_12345",
+    "default",
+    "process_order",
+    ""test-payload"",
+    3,
+    "Test exception",
+    #(#(2024, 9, 29), #(10, 30, 0)),
+    #(#(2024, 9, 29), #(11, 0, 0)),
+    #(#(2024, 9, 29), #(10, 30, 0)),
+  ),
+])

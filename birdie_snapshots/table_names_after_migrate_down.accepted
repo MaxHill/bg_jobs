@@ -1,0 +1,7 @@
+---
+version: 1.2.3
+title: table names after migrate down
+file: ./test/bg_jobs_test.gleam
+test_name: migrate_test
+---
+Ok([])

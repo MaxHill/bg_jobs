@@ -1,0 +1,11 @@
+---
+version: 1.2.3
+title: Multiple jobs processed
+file: ./test/bg_jobs/queue_test.gleam
+test_name: process_muliptle_jobs_test
+---
+[
+  "test message1",
+  "test message2",
+  "test message3",
+]
