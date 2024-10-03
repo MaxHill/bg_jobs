@@ -1,18 +1,21 @@
+import bg_jobs
 import bg_jobs/job
 import gleam/erlang/process
 import gleam/function
-import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
+import gleam/otp/supervisor
 import gleam/result
+import singularity
 import sqlight
 
 // Errors
 pub type BgJobError {
   DbError(sqlight.Error)
   ParseDateError(String)
+  DispatchJobError
   Unknown(String)
 }
 
@@ -58,40 +61,65 @@ fn run_worker(
 }
 
 // Queue
-pub fn start(
-  _input: Nil,
-  parent_subject: process.Subject(process.Subject(Message(job_type))),
+pub fn new_otp_worker(
+  registry registry,
+  queue_type queue_type: fn(process.Subject(Message(job))) -> b,
+  max_retries max_retries: Int,
+  job_store job_store: JobStore,
+  job_mapper job_mapper: fn(job.Job) -> option.Option(Worker),
+) {
+  let queue_name = bg_jobs.queue_type_name_to_string(queue_type)
+
+  supervisor.worker(fn(_state) {
+    new(
+      queue_name: queue_name,
+      max_retries: max_retries,
+      job_store: job_store,
+      job_mapper: job_mapper,
+    )
+    |> result.map(singularity.register(registry, queue_type, subject: _))
+  })
+}
+
+pub fn new(
   queue_name queue_name: String,
   max_retries max_retries: Int,
   job_store job_store: JobStore,
   job_mapper job_mapper: fn(job.Job) -> option.Option(Worker),
-) -> Result(process.Subject(Message(job_type)), actor.StartError) {
+) {
   actor.start_spec(actor.Spec(
     init: fn() {
       let actor_subject = process.new_subject()
-      process.send(parent_subject, actor_subject)
       let selector =
         process.new_selector()
         |> process.selecting(actor_subject, function.identity)
 
-      actor.Ready(
+      let state =
         QueueState(
           queue_name: queue_name,
           job_store: job_store,
           find_worker: job_mapper,
           max_retries: max_retries,
           self: actor_subject,
-        ),
-        selector,
-      )
+        )
+
+      actor.Ready(state, selector)
     },
     init_timeout: 1000,
     loop: handle_queue_message,
   ))
 }
 
+pub fn get_queue(registry, job_type) {
+  singularity.require(registry, job_type, timeout_ms: 1000)
+}
+
 pub fn enqueue_job(queue, name: String, payload: String) {
   process.try_call(queue, DispatchJob(_, name, payload), 1000)
+  // TODO: propper logging
+  |> result.map_error(fn(e) { io.debug(e) })
+  |> result.replace_error(DispatchJobError)
+  |> result.flatten
 }
 
 pub fn process_jobs(queue) {
@@ -141,6 +169,7 @@ fn handle_queue_message(
     DispatchJob(client, job_name, payload) -> {
       let job = state.job_store.enqueue_job(state.queue_name, job_name, payload)
       process.send(client, job)
+      actor.send(state.self, ProcessJobs)
       actor.continue(state)
     }
     HandleError(job, exception) -> {
@@ -157,9 +186,9 @@ fn handle_queue_message(
       actor.continue(state)
     }
     ProcessJobs -> {
-      // Panic and try to restart the service if something goes wrong
       let jobs = case state.job_store.get_next_jobs(state.queue_name, 1) {
         Ok(jobs) -> jobs
+        // Panic and try to restart the service if something goes wrong
         Error(_) -> panic as "Job store paniced"
       }
 
@@ -175,7 +204,6 @@ fn handle_queue_message(
             )
             Nil
           }
-          // Panic and try to restart the service if something goes wrong
           option.None -> {
             let assert Ok(_) =
               state.job_store.move_job_to_failed(

@@ -22,7 +22,10 @@ pub fn worker(logger: process.Subject(test_logger.LogMessage), job: job.Job) {
   Ok(Nil)
 }
 
-pub fn dispatch(queue: process.Subject(queue.Message(a)), payload: LogPayload) {
+pub fn dispatch(
+  queue: process.Subject(queue.Message(LogPayload)),
+  payload: LogPayload,
+) {
   queue.enqueue_job(queue, job_name, to_string(payload))
 }
 

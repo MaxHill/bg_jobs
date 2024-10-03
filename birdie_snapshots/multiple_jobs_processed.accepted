@@ -5,7 +5,9 @@ file: ./test/bg_jobs/queue_test.gleam
 test_name: process_muliptle_jobs_test
 ---
 [
-  "test message1",
-  "test message2",
-  "test message3",
+  "test message 1",
+  "test message 2",
+  "test message 3",
+  "test message 4",
+  "test message 5",
 ]

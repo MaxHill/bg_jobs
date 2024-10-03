@@ -64,3 +64,17 @@ pub fn migrate_down(conn: sqlight.Connection) {
   use _ <- result.try(sqlight.exec(sql_failed, conn))
   sqlight.exec(sql_succeded, conn)
 }
+
+import gleam/erlang/process
+
+/// Extracts the name of type from the constructor.
+///
+@external(erlang, "bg_jobs_ffi", "queue_type_name_to_string")
+pub fn queue_type_name_to_string(
+  varfn: fn(process.Subject(msg)) -> wrap,
+) -> String
+
+/// Extracts the name of type from the constructor.
+///
+@external(erlang, "bg_jobs_ffi", "function_name_to_string")
+pub fn function_name_to_string(fun: fn(any) -> something) -> String

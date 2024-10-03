@@ -6,9 +6,9 @@ test_name: job_is_moved_to_success_after_succeeding_test
 ---
 Ok([
   #(
-    "test-queue",
+    "default_queue",
     "LOG_JOB",
-    ""test message1"",
+    ""test message 1"",
     0,
   ),
 ])

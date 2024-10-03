@@ -25,6 +25,7 @@ packages = [
   { name = "ranger", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "ranger", source = "hex", outer_checksum = "1566C272B1D141B3BBA38B25CB761EF56E312E79EC0E2DFD4D3C19FB0CC1F98C" },
   { name = "rank", version = "1.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "rank", source = "hex", outer_checksum = "5660E361F0E49CBB714CC57CC4C89C63415D8986F05B2DA0C719D5642FAD91C9" },
   { name = "simplifile", version = "2.1.0", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "BDD04F5D31D6D34E2EDFAEF0B68A6297AEC939888C3BFCE61133DE13857F6DA2" },
+  { name = "singularity", version = "0.1.1", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "singularity", source = "hex", outer_checksum = "AF30FAF75D2D59A1F24DCC5BE6B902F374C115AE54BD0F8CAEDEC1E571BB77BF" },
   { name = "sqlight", version = "0.9.1", build_tools = ["gleam"], requirements = ["esqlite", "gleam_stdlib"], otp_app = "sqlight", source = "hex", outer_checksum = "A495F2892627B2268CCBCC5107EDC1E1AD9547D5F4F21A5DB04CEA72B8931B00" },
   { name = "thoas", version = "1.2.1", build_tools = ["rebar3"], requirements = [], otp_app = "thoas", source = "hex", outer_checksum = "E38697EDFFD6E91BD12CEA41B155115282630075C2A727E7A6B2947F5408B86A" },
   { name = "trie_again", version = "1.1.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "trie_again", source = "hex", outer_checksum = "5B19176F52B1BD98831B57FDC97BD1F88C8A403D6D8C63471407E78598E27184" },
@@ -41,5 +42,6 @@ gleam_otp = { version = ">= 0.12.0 and < 1.0.0" }
 gleam_stdlib = { version = ">= 0.34.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
 pprint = { version = ">= 1.0.3 and < 2.0.0" }
+singularity = { version = ">= 0.1.1 and < 1.0.0" }
 sqlight = { version = ">= 0.9.1 and < 1.0.0" }
 youid = { version = ">= 1.2.0 and < 2.0.0" }
