@@ -110,6 +110,10 @@ pub fn new(
   ))
 }
 
+pub fn registry() {
+  singularity.start()
+}
+
 pub fn get_queue(registry, job_type) {
   singularity.require(registry, job_type, timeout_ms: 1000)
 }
