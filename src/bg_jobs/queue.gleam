@@ -20,23 +20,21 @@ pub type BgJobError {
 }
 
 // Worker
-pub type Worker =
-  fn(job.Job) -> Result(Nil, String)
+pub type Worker {
+  Worker(job_name: String, execute: fn(job.Job) -> Result(Nil, String))
+}
 
-pub fn match_worker(lookup_table: List(#(String, Worker))) {
-  fn(job: job.Job) {
-    lookup_table
-    |> list.map(fn(in) {
-      let #(name, worker) = in
-      case name == job.name {
-        True -> Ok(worker)
-        False -> Error(Nil)
-      }
-    })
-    |> result.values
-    |> list.first
-    |> option.from_result
-  }
+pub fn match_worker(workers: List(Worker), job: job.Job) {
+  workers
+  |> list.map(fn(worker) {
+    case worker.job_name == job.name {
+      True -> Ok(worker)
+      False -> Error(Nil)
+    }
+  })
+  |> result.values
+  |> list.first
+  |> option.from_result
 }
 
 fn run_worker(
@@ -46,7 +44,7 @@ fn run_worker(
   actor: process.Subject(Message(m)),
   max_attempts: Int,
 ) {
-  case worker(job), job.attempts < max_attempts {
+  case worker.execute(job), job.attempts < max_attempts {
     Ok(_), _ -> {
       actor.send(actor, HandleSuccess(job))
     }
@@ -66,7 +64,7 @@ pub fn new_otp_worker(
   queue_type queue_type: fn(process.Subject(Message(job))) -> b,
   max_retries max_retries: Int,
   job_store job_store: JobStore,
-  job_mapper job_mapper: fn(job.Job) -> option.Option(Worker),
+  workers workers: List(Worker),
 ) {
   let queue_name = bg_jobs.queue_type_name_to_string(queue_type)
 
@@ -75,7 +73,7 @@ pub fn new_otp_worker(
       queue_name: queue_name,
       max_retries: max_retries,
       job_store: job_store,
-      job_mapper: job_mapper,
+      workers: workers,
     )
     |> result.map(singularity.register(registry, queue_type, subject: _))
   })
@@ -85,7 +83,7 @@ pub fn new(
   queue_name queue_name: String,
   max_retries max_retries: Int,
   job_store job_store: JobStore,
-  job_mapper job_mapper: fn(job.Job) -> option.Option(Worker),
+  workers workers: List(Worker),
 ) {
   actor.start_spec(actor.Spec(
     init: fn() {
@@ -98,7 +96,7 @@ pub fn new(
         QueueState(
           queue_name: queue_name,
           job_store: job_store,
-          find_worker: job_mapper,
+          workers: workers,
           max_retries: max_retries,
           self: actor_subject,
         )
@@ -159,7 +157,7 @@ pub type QueueState(job_type) {
   QueueState(
     queue_name: String,
     job_store: JobStore,
-    find_worker: fn(job.Job) -> option.Option(Worker),
+    workers: List(Worker),
     max_retries: Int,
     self: process.Subject(Message(job_type)),
   )
@@ -197,7 +195,7 @@ fn handle_queue_message(
       }
 
       list.each(jobs, fn(job) {
-        case state.find_worker(job) {
+        case match_worker(state.workers, job) {
           option.Some(worker) -> {
             run_worker(
               job,

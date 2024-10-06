@@ -9,15 +9,15 @@ import test_helpers/test_logger
 
 pub const job_name = "FAILING_JOB"
 
-pub fn lookup(logger: process.Subject(test_logger.LogMessage)) {
-  #(job_name, worker(logger, _))
-}
-
 pub type FailingPayload {
   FailingPayload(message: String)
 }
 
-pub fn worker(logger: process.Subject(test_logger.LogMessage), job: job.Job) {
+pub fn worker(logger: process.Subject(test_logger.LogMessage)) {
+  queue.Worker(job_name: job_name, execute: execute(logger, _))
+}
+
+pub fn execute(logger: process.Subject(test_logger.LogMessage), job: job.Job) {
   let assert Ok(FailingPayload(payload)) = from_string(job.payload)
   test_logger.log_message(logger)(
     "Attempt: "
@@ -37,7 +37,7 @@ pub fn dispatch(
 }
 
 // Private methods
-fn to_string(log_payload: FailingPayload) {
+pub fn to_string(log_payload: FailingPayload) {
   json.string(log_payload.message)
   |> json.to_string
 }

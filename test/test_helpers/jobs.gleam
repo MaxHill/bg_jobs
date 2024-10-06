@@ -16,6 +16,28 @@ pub type Queues(msg) {
   SecondQueue(process.Subject(queue.Message(msg)))
 }
 
+pub type Jobs {
+  LogJob(log_job.Payload)
+  FailingJob(failing_job.FailingPayload)
+}
+
+pub fn dispatch(queues, payload) {
+  case payload {
+    LogJob(payload) -> {
+      let assert DefaultQueue(queue) = queue.get_queue(queues, DefaultQueue)
+      queue.enqueue_job(queue, log_job.job_name, log_job.to_string(payload))
+    }
+    FailingJob(payload) -> {
+      let assert DefaultQueue(queue) = queue.get_queue(queues, DefaultQueue)
+      queue.enqueue_job(
+        queue,
+        failing_job.job_name,
+        failing_job.to_string(payload),
+      )
+    }
+  }
+}
+
 pub fn setup(conn: sqlight.Connection) {
   use _ <- result.map(test_helpers.reset_db(conn))
   let job_store = sqlite_store.try_new_store(conn)
@@ -29,21 +51,16 @@ pub fn setup(conn: sqlight.Connection) {
       queue_type: DefaultQueue,
       max_retries: 3,
       job_store: job_store,
-      job_mapper: queue.match_worker([
-        log_job.lookup(logger),
-        failing_job.lookup(logger),
-      ]),
+      workers: [log_job.worker(logger), failing_job.worker(logger)],
     )
+
   let second_queue =
     queue.new_otp_worker(
       registry: registry,
       queue_type: SecondQueue,
       max_retries: 3,
       job_store: job_store,
-      job_mapper: queue.match_worker([
-        log_job.lookup(logger),
-        failing_job.lookup(logger),
-      ]),
+      workers: [log_job.worker(logger), failing_job.worker(logger)],
     )
 
   let assert Ok(_sup) =

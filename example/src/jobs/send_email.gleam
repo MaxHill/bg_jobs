@@ -49,14 +49,3 @@ fn from_string(
     ),
   )
 }
-// pub type DispatchFn(job_type) =
-//   fn(process.Subject(queue.Message(job_type)), SendEmailPayload) ->
-//     Result(job.Job, queue.BgJobError)
-//
-// pub type JobDefinition(job_type) {
-//   JobDefinition(
-//     name: String,
-//     worker: queue.Worker,
-//     dispatch: DispatchFn(job_type),
-//   )
-// }

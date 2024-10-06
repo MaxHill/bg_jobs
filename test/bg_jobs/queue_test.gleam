@@ -23,8 +23,7 @@ pub fn single_job_test() {
   let assert jobs.DefaultQueue(queue) =
     queue.get_queue(queues, jobs.DefaultQueue)
 
-  let assert Ok(_job) =
-    log_job.dispatch(queue, log_job.LogPayload("test message"))
+  let assert Ok(_job) = log_job.dispatch(queue, log_job.Payload("test message"))
 
   // Wait for jobs to process
   process.sleep(15)
@@ -41,7 +40,7 @@ pub fn job_is_moved_to_success_after_succeeding_test() {
   let assert jobs.DefaultQueue(queue) =
     queue.get_queue(queues, jobs.DefaultQueue)
 
-  let _ = log_job.dispatch(queue, log_job.LogPayload("test message 1"))
+  let _ = log_job.dispatch(queue, log_job.Payload("test message 1"))
 
   // Wait for jobs to process
   process.sleep(15)
@@ -61,11 +60,11 @@ pub fn process_muliptle_jobs_test() {
   let assert jobs.DefaultQueue(queue) =
     queue.get_queue(queues, jobs.DefaultQueue)
 
-  let _ = log_job.dispatch(queue, log_job.LogPayload("test message 1"))
-  let _ = log_job.dispatch(queue, log_job.LogPayload("test message 2"))
-  let _ = log_job.dispatch(queue, log_job.LogPayload("test message 3"))
-  let _ = log_job.dispatch(queue, log_job.LogPayload("test message 4"))
-  let _ = log_job.dispatch(queue, log_job.LogPayload("test message 5"))
+  let _ = log_job.dispatch(queue, log_job.Payload("test message 1"))
+  let _ = log_job.dispatch(queue, log_job.Payload("test message 2"))
+  let _ = log_job.dispatch(queue, log_job.Payload("test message 3"))
+  let _ = log_job.dispatch(queue, log_job.Payload("test message 4"))
+  let _ = log_job.dispatch(queue, log_job.Payload("test message 5"))
 
   // Wait for jobs to process
   process.sleep(15)
@@ -108,7 +107,9 @@ pub fn handle_no_worker_found_test() {
     queue.get_queue(queues, jobs.DefaultQueue)
 
   let assert Ok(_) = queue.enqueue_job(queue, "non-existing", "test-payload")
-  let assert Ok(_) = log_job.dispatch(queue, log_job.LogPayload("testing"))
+  let assert Ok(_) =
+    jobs.dispatch(queues, jobs.LogJob(log_job.Payload("testing")))
+  // let assert Ok(_) = log_job.dispatch(queue, log_job.Payload("testing"))
 
   process.sleep(10)
 
@@ -149,10 +150,7 @@ pub fn handle_panic_test() {
       queue_type: jobs.DefaultQueue,
       max_retries: 3,
       job_store: bad_store,
-      job_mapper: queue.match_worker([
-        log_job.lookup(logger),
-        failing_job.lookup(logger),
-      ]),
+      workers: [log_job.worker(logger), failing_job.worker(logger)],
     )
 
   let assert Ok(_sup) =
@@ -170,8 +168,7 @@ pub fn handle_panic_test() {
 
   let assert jobs.DefaultQueue(queue) =
     queue.get_queue(queues, jobs.DefaultQueue)
-  let assert Ok(_job) =
-    log_job.dispatch(queue, log_job.LogPayload("test message"))
+  let assert Ok(_job) = log_job.dispatch(queue, log_job.Payload("test message"))
 
   // Wait for restart
   process.sleep(10)
@@ -183,5 +180,5 @@ pub fn handle_panic_test() {
   |> should.not_equal(queue)
 
   let assert Ok(_job) =
-    log_job.dispatch(restarted_queue, log_job.LogPayload("test message"))
+    log_job.dispatch(restarted_queue, log_job.Payload("test message"))
 }
