@@ -1,10 +1,11 @@
 import bg_jobs
-import bg_jobs/sqlite_store
+import bg_jobs/sqlite_db_adapter
 import chip
+import gleam/erlang/process
 import sqlight
+import test_helpers
 import test_helpers/jobs/failing_job
 import test_helpers/jobs/log_job
-import test_helpers/test_logger
 
 /// Supervisor worker for a queue 
 pub fn queue(queue_name: String, workers: List(bg_jobs.Worker)) {
@@ -13,20 +14,35 @@ pub fn queue(queue_name: String, workers: List(bg_jobs.Worker)) {
     max_retries: 3,
     workers: workers,
     init_timeout: 100,
+    poll_interval: 10,
+    max_concurrent_jobs: 1,
   )
 }
 
-pub fn setup(conn: sqlight.Connection) {
-  let db_adapter = sqlite_store.try_new_store(conn)
+pub fn setup(
+  conn: sqlight.Connection,
+  f: fn(
+    #(
+      process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
+      bg_jobs.DbAdapter,
+      process.Subject(_),
+      process.Subject(_),
+    ),
+  ) ->
+    Nil,
+) {
+  let logger = test_helpers.new_logger()
+  let event_logger = test_helpers.new_logger()
+  let db_adapter = sqlite_db_adapter.try_new_store(conn, [])
   let assert Ok(_) = db_adapter.migrate_down()
   let assert Ok(_) = db_adapter.migrate_up()
-  let logger = test_logger.new_logger()
 
   let assert Ok(#(_sup, registry)) =
     bg_jobs.setup(
       bg_jobs.QueueSupervisorSpec(
         max_frequency: 5,
         frequency_period: 1,
+        event_listners: [test_helpers.new_logger_event_listner(event_logger, _)],
         db_adapter: db_adapter,
         queues: [
           queue("default_queue", [
@@ -37,8 +53,14 @@ pub fn setup(conn: sqlight.Connection) {
         ],
       ),
     )
-
   let assert Ok(_default_queue) = chip.find(registry, "default_queue")
 
-  #(registry, db_adapter, logger)
+  bg_jobs.start_processing_all(registry)
+
+  f(#(registry, db_adapter, logger, event_logger))
+
+  // Cleanup
+  bg_jobs.stop_processing_all(registry)
+  // Give it time to stop polling before connection closes
+  process.sleep(100)
 }

@@ -5,7 +5,7 @@ import gleam/erlang/process
 import gleam/int
 import gleam/json
 import gleam/result
-import test_helpers/test_logger
+import test_helpers
 
 pub const job_name = "FAILING_JOB"
 
@@ -13,16 +13,16 @@ pub type Payload {
   FailingPayload(message: String)
 }
 
-pub fn worker(logger: process.Subject(test_logger.LogMessage)) {
+pub fn worker(logger: process.Subject(test_helpers.LogMessage)) {
   bg_jobs.Worker(job_name: job_name, execute: execute(logger, _))
 }
 
 pub fn execute(
-  logger: process.Subject(test_logger.LogMessage),
+  logger: process.Subject(test_helpers.LogMessage),
   job: bg_jobs.Job,
 ) {
   let assert Ok(FailingPayload(payload)) = from_string(job.payload)
-  test_logger.log_message(logger)(
+  test_helpers.log_message(logger)(
     "Attempt: "
     <> int.to_string(job.attempts)
     <> " - Failed with payload: "

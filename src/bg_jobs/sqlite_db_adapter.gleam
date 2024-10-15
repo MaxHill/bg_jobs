@@ -10,34 +10,63 @@ import gleam/string
 import sqlight
 import youid/uuid
 
-pub fn try_new_store(conn: sqlight.Connection) {
+pub fn try_new_store(
+  conn: sqlight.Connection,
+  event_listners: List(bg_jobs.EventListner),
+) {
+  let send_event = bg_jobs.send_event(event_listners, _)
   bg_jobs.DbAdapter(
-    enqueue_job: enqueue_job(conn),
-    get_next_jobs: get_next_jobs(conn),
-    move_job_to_succeded: move_job_to_succeded(conn),
-    move_job_to_failed: move_job_to_failed(conn),
-    get_succeeded_jobs: get_succeeded_jobs(conn),
-    get_failed_jobs: get_failed_jobs(conn),
-    increment_attempts: increment_attempts(conn),
+    enqueue_job: enqueue_job(conn, send_event),
+    get_next_jobs: get_next_jobs(conn, send_event),
+    move_job_to_succeded: move_job_to_succeded(conn, send_event),
+    move_job_to_failed: move_job_to_failed(conn, send_event),
+    get_succeeded_jobs: get_succeeded_jobs(conn, send_event),
+    get_failed_jobs: get_failed_jobs(conn, send_event),
+    increment_attempts: increment_attempts(conn, send_event),
     migrate_up: migrate_up(conn),
     migrate_down: migrate_down(conn),
   )
 }
 
-fn move_job_to_succeded(conn: sqlight.Connection) {
-  fn(job: bg_jobs.Job) {
-    use _ <- result.try(
-      sqlight.query(
-        "DELETE FROM jobs
-         WHERE id =  ?;",
-        conn,
-        [sqlight.text(job.id)],
-        utils.discard_decode,
-      )
-      |> result.map_error(bg_jobs.DbError),
-    )
+fn query(
+  send_event: fn(bg_jobs.Event) -> Nil,
+  sql: String,
+  on connection: sqlight.Connection,
+  with arguments: List(sqlight.Value),
+  expecting decoder: dynamic.Decoder(t),
+) {
+  send_event(bg_jobs.DbQueryEvent(sql, list.map(arguments, string.inspect)))
+  let res =
+    sqlight.query(sql, connection, arguments, decoder)
+    |> result.map_error(bg_jobs.DbError)
+    |> result.map_error(fn(err) {
+      send_event(bg_jobs.DbErrorEvent(err))
+      err
+    })
+    |> result.map(fn(res) {
+      send_event(bg_jobs.DbResponseEvent(string.inspect(res)))
+      res
+    })
 
-    sqlight.query(
+  res
+}
+
+fn move_job_to_succeded(
+  conn: sqlight.Connection,
+  send_event: bg_jobs.EventListner,
+) {
+  fn(job: bg_jobs.Job) {
+    use _ <- result.try(query(
+      send_event,
+      "DELETE FROM jobs
+         WHERE id =  ?;",
+      conn,
+      [sqlight.text(job.id)],
+      utils.discard_decode,
+    ))
+
+    query(
+      send_event,
       "
       INSERT INTO jobs_succeeded (
         id, 
@@ -66,14 +95,17 @@ fn move_job_to_succeded(conn: sqlight.Connection) {
       ],
       decode_succeded_db_row,
     )
-    |> result.map_error(bg_jobs.DbError)
     |> result.replace(Nil)
   }
 }
 
-fn get_succeeded_jobs(conn: sqlight.Connection) {
+fn get_succeeded_jobs(
+  conn: sqlight.Connection,
+  send_event: bg_jobs.EventListner,
+) {
   fn(limit: Int) {
-    sqlight.query(
+    query(
+      send_event,
       "
       SELECT * 
       FROM jobs_succeeded
@@ -83,15 +115,15 @@ fn get_succeeded_jobs(conn: sqlight.Connection) {
       [sqlight.int(limit)],
       decode_succeded_db_row,
     )
-    |> result.map_error(bg_jobs.DbError)
     |> result.map(result.all)
     |> result.flatten
   }
 }
 
-fn get_failed_jobs(conn: sqlight.Connection) {
+fn get_failed_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
   fn(limit: Int) {
-    sqlight.query(
+    query(
+      send_event,
       "
       SELECT *
       FROM jobs_failed
@@ -101,22 +133,27 @@ fn get_failed_jobs(conn: sqlight.Connection) {
       [sqlight.int(limit)],
       decode_failed_db_row,
     )
-    |> result.map_error(bg_jobs.DbError)
     |> result.map(result.all)
     |> result.flatten
   }
 }
 
-fn move_job_to_failed(conn: sqlight.Connection) {
+fn move_job_to_failed(
+  conn: sqlight.Connection,
+  send_event: bg_jobs.EventListner,
+) {
   fn(job: bg_jobs.Job, exception: String) {
     let sql =
       "DELETE FROM jobs
       WHERE id =  ?;"
 
-    use _ <- result.try(
-      sqlight.query(sql, conn, [sqlight.text(job.id)], utils.discard_decode)
-      |> result.map_error(bg_jobs.DbError),
-    )
+    use _ <- result.try(query(
+      send_event,
+      sql,
+      conn,
+      [sqlight.text(job.id)],
+      utils.discard_decode,
+    ))
 
     let sql =
       "
@@ -134,7 +171,8 @@ fn move_job_to_failed(conn: sqlight.Connection) {
       RETURNING *;
     "
 
-    sqlight.query(
+    query(
+      send_event,
       sql,
       conn,
       [
@@ -152,12 +190,11 @@ fn move_job_to_failed(conn: sqlight.Connection) {
       ],
       decode_failed_db_row,
     )
-    |> result.map_error(bg_jobs.DbError)
     |> result.replace(Nil)
   }
 }
 
-fn get_next_jobs(conn: sqlight.Connection) {
+fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
   fn(job_names: List(String), limit: Int) {
     let job_names_sql =
       list.fold(job_names, "", fn(acc, _) {
@@ -171,7 +208,7 @@ fn get_next_jobs(conn: sqlight.Connection) {
          WHERE id IN (
           SELECT id
             FROM jobs
-           WHERE name in (" <> job_names_sql <> ")
+           WHERE name IN (" <> job_names_sql <> ")
              AND available_at <= CURRENT_TIMESTAMP  
              AND reserved_at IS NULL  
         ORDER BY available_at ASC  
@@ -182,16 +219,19 @@ fn get_next_jobs(conn: sqlight.Connection) {
     let arguments =
       list.concat([list.map(job_names, sqlight.text), [sqlight.int(limit)]])
 
-    sqlight.query(sql, conn, arguments, decode_enqueued_db_row)
-    |> result.map_error(bg_jobs.DbError)
+    query(send_event, sql, conn, arguments, decode_enqueued_db_row)
     |> result.map(result.all)
     |> result.flatten
   }
 }
 
-fn increment_attempts(conn: sqlight.Connection) {
+fn increment_attempts(
+  conn: sqlight.Connection,
+  send_event: bg_jobs.EventListner,
+) {
   fn(job: bg_jobs.Job) {
-    sqlight.query(
+    query(
+      send_event,
       "
     UPDATE jobs
        SET attempts = attempts + 1
@@ -202,10 +242,9 @@ fn increment_attempts(conn: sqlight.Connection) {
       [sqlight.text(job.id)],
       decode_enqueued_db_row,
     )
-    |> result.map_error(bg_jobs.DbError)
     |> result.try(fn(list) {
       list.first(list)
-      |> result.replace_error(bg_jobs.Unknown(
+      |> result.replace_error(bg_jobs.UnknownError(
         "Should never be possible if update is successfull",
       ))
     })
@@ -213,7 +252,7 @@ fn increment_attempts(conn: sqlight.Connection) {
   }
 }
 
-fn enqueue_job(conn: sqlight.Connection) {
+fn enqueue_job(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
   fn(job_name: String, payload: String) {
     let sql =
       "
@@ -222,7 +261,8 @@ fn enqueue_job(conn: sqlight.Connection) {
       RETURNING *;
     "
 
-    sqlight.query(
+    query(
+      send_event,
       sql,
       conn,
       [
@@ -232,10 +272,9 @@ fn enqueue_job(conn: sqlight.Connection) {
       ],
       decode_enqueued_db_row,
     )
-    |> result.map_error(bg_jobs.DbError)
     |> result.try(fn(list) {
       list.first(list)
-      |> result.replace_error(bg_jobs.Unknown(
+      |> result.replace_error(bg_jobs.UnknownError(
         "Should never be possible if insert is successfull",
       ))
     })

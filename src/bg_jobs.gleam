@@ -19,7 +19,7 @@ pub type BgJobError {
   ParseDateError(String)
   DispatchJobError(String)
   SetupError(actor.StartError)
-  Unknown(String)
+  UnknownError(String)
 }
 
 // Worker
@@ -104,6 +104,7 @@ pub type QueueSupervisorSpec {
     frequency_period: Int,
     db_adapter: DbAdapter,
     queues: List(QueueSpec),
+    event_listners: List(EventListner),
   )
 }
 
@@ -113,6 +114,8 @@ pub type QueueSpec {
     workers: List(Worker),
     max_retries: Int,
     init_timeout: Int,
+    max_concurrent_jobs: Int,
+    poll_interval: Int,
   )
 }
 
@@ -134,7 +137,11 @@ pub fn setup(spec: QueueSupervisorSpec) {
           children
           |> supervisor.add(registry_otp_worker())
           // Add the dispatch worker
-          |> supervisor.add(dispatcher_worker(spec.db_adapter, all_workers))
+          |> supervisor.add(dispatcher_worker(
+            spec.db_adapter,
+            all_workers,
+            spec.event_listners,
+          ))
           // Add the queues
           |> fn(children) {
             spec.queues
@@ -146,6 +153,9 @@ pub fn setup(spec: QueueSupervisorSpec) {
                   max_retries: queue_spec.max_retries,
                   db_adapter: spec.db_adapter,
                   workers: queue_spec.workers,
+                  event_listners: spec.event_listners,
+                  poll_interval: queue_spec.poll_interval,
+                  max_concurrent_jobs: queue_spec.max_concurrent_jobs,
                 )
               })
             })
@@ -169,48 +179,11 @@ pub fn setup(spec: QueueSupervisorSpec) {
   }
 }
 
-// pub fn supervised_queues(
-//   max_frequency max_frequency: Int,
-//   frequency_period frequency_period: Int,
-//   db_adapter db_adapter: DbAdapter,
-//   queues queues: List(supervisor.ChildSpec(Message, Context, Context)),
-// ) {
-//   let self = process.new_subject()
-//
-//   case
-//     supervisor.start_spec(
-//       supervisor.Spec(
-//         argument: self,
-//         max_frequency: max_frequency,
-//         frequency_period: frequency_period,
-//         init: fn(children) {
-//           children
-//           // First spawn the registry
-//           |> supervisor.add(registry_otp_worker())
-//           |> supervisor.add(dispatcher_worker(db_adapter))
-//           // Add the queues
-//           |> fn(children) {
-//             queues
-//             |> list.fold(children, supervisor.add)
-//           }
-//           // Finally notify the main process we're ready
-//           |> supervisor.add(supervisor_ready())
-//         },
-//       ),
-//     )
-//   {
-//     Ok(supervisor) -> {
-//       let assert Ok(queue_registry) = process.receive(self, 500)
-//       Ok(#(supervisor, queue_registry))
-//     }
-//     Error(e) -> {
-//       io.debug("Could not create supervisor")
-//       Error(SetupError(e))
-//     }
-//   }
-// }
-
-fn dispatcher_worker(db_adapter: DbAdapter, workers: List(Worker)) {
+fn dispatcher_worker(
+  db_adapter: DbAdapter,
+  workers: List(Worker),
+  event_listners: List(EventListner),
+) {
   supervisor.worker(fn(context: Context) {
     new_queue(
       registry: context.registry,
@@ -218,6 +191,9 @@ fn dispatcher_worker(db_adapter: DbAdapter, workers: List(Worker)) {
       max_retries: 3,
       db_adapter: db_adapter,
       workers: workers,
+      event_listners: event_listners,
+      max_concurrent_jobs: 0,
+      poll_interval: 0,
     )
   })
 }
@@ -262,6 +238,9 @@ pub fn new_queue(
   max_retries max_retries: Int,
   db_adapter db_adapter: DbAdapter,
   workers workers: List(Worker),
+  event_listners event_listners: List(EventListner),
+  poll_interval poll_interval: Int,
+  max_concurrent_jobs max_concurrent_jobs: Int,
 ) {
   actor.start_spec(actor.Spec(
     init: fn() {
@@ -279,7 +258,11 @@ pub fn new_queue(
           queue_name: queue_name,
           db_adapter: db_adapter,
           workers: workers,
+          send_event: send_event(event_listners, _),
+          poll_interval: poll_interval,
+          is_polling: False,
           max_retries: max_retries,
+          max_concurrent_jobs: max_concurrent_jobs,
           self: self,
         )
 
@@ -311,6 +294,14 @@ pub fn enqueue_job(
   |> result.map_error(fn(e) { io.debug(e) })
   |> result.replace_error(DispatchJobError("Call error"))
   |> result.flatten
+}
+
+pub fn start_processing_all(registry: QueueRegistry) {
+  chip.dispatch(registry, fn(queue) { actor.send(queue, StartPolling) })
+}
+
+pub fn stop_processing_all(registry: QueueRegistry) {
+  chip.dispatch(registry, fn(queue) { actor.send(queue, StopPolling) })
 }
 
 /// Sends a message to the specified queue to process jobs.
@@ -360,6 +351,31 @@ pub type DbAdapter {
   )
 }
 
+// Event
+//---------------
+
+pub type Event {
+  JobEnqueuedEvent(job: Job)
+  JobReservedEvent(queue_name: String, job: Job)
+  JobStartEvent(queue_name: String, job: Job)
+  JobSuccededEvent(queue_name: String, job: Job)
+  JobFailedEvent(queue_name: String, job: Job)
+  QueuePollingStartedEvent(queue_name: String)
+  QueuePollingStopedEvent(queue_name: String)
+  QueueErrorEvent(queue_name: String, error: BgJobError)
+  DbQueryEvent(sql: String, attributes: List(String))
+  DbResponseEvent(response: String)
+  DbErrorEvent(error: BgJobError)
+}
+
+pub type EventListner =
+  fn(Event) -> Nil
+
+pub fn send_event(event_listners: List(EventListner), event: Event) {
+  event_listners
+  |> list.each(fn(handler) { handler(event) })
+}
+
 // Actor
 //---------------
 
@@ -369,6 +385,9 @@ pub opaque type Message {
     name: String,
     payload: String,
   )
+  StartPolling
+  StopPolling
+  LoopPolling
   HandleError(Job, exception: String)
   HandleSuccess(Job)
   ProcessJobs
@@ -379,7 +398,11 @@ pub type QueueState {
     queue_name: String,
     db_adapter: DbAdapter,
     workers: List(Worker),
+    poll_interval: Int,
+    is_polling: Bool,
     max_retries: Int,
+    max_concurrent_jobs: Int,
+    send_event: fn(Event) -> Nil,
     self: process.Subject(Message),
   )
 }
@@ -389,6 +412,28 @@ fn handle_queue_message(
   state: QueueState,
 ) -> actor.Next(Message, QueueState) {
   case message {
+    StartPolling -> {
+      case state.queue_name {
+        "job_dispatcher" -> actor.continue(state)
+        _ -> {
+          process.send_after(state.self, state.poll_interval, LoopPolling)
+          state.send_event(QueuePollingStartedEvent(state.queue_name))
+          actor.continue(QueueState(..state, is_polling: True))
+        }
+      }
+    }
+    StopPolling -> {
+      actor.continue(QueueState(..state, is_polling: False))
+    }
+    LoopPolling -> {
+      case state.is_polling {
+        True -> {
+          process.send_after(state.self, state.poll_interval, ProcessJobs)
+          actor.continue(state)
+        }
+        False -> actor.continue(state)
+      }
+    }
     DispatchJob(client, job_name, payload) -> {
       let worker_job_name =
         list.map(state.workers, fn(job) { job.job_name })
@@ -398,6 +443,10 @@ fn handle_queue_message(
         Ok(name) -> {
           let job = state.db_adapter.enqueue_job(name, payload)
           process.send(client, job)
+          case job {
+            Ok(job) -> state.send_event(JobEnqueuedEvent(job))
+            Error(e) -> state.send_event(QueueErrorEvent(state.queue_name, e))
+          }
         }
         Error(_) -> {
           let job =
@@ -412,51 +461,50 @@ fn handle_queue_message(
             )
           actor.send(
             state.self,
-            HandleError(job, "Could not find worker for job"),
+            HandleError(job, "Could not enqueue job with no worker"),
           )
-          process.send(
-            client,
-            Error(DispatchJobError("No worker for job: " <> job_name)),
-          )
+
+          let error = DispatchJobError("No worker for job: " <> job_name)
+          process.send(client, Error(error))
+          state.send_event(QueueErrorEvent(state.queue_name, error))
         }
       }
       actor.continue(state)
     }
     HandleError(job, exception) -> {
       let assert Ok(_) = state.db_adapter.move_job_to_failed(job, exception)
-      actor.send(state.self, ProcessJobs)
       // remove from db
       // add to failed jobs
+      state.send_event(JobFailedEvent(state.queue_name, job))
       actor.continue(state)
     }
     HandleSuccess(job) -> {
       // Panic and try to restart the service if something goes wrong
       let assert Ok(_) = state.db_adapter.move_job_to_succeded(job)
-      actor.send(state.self, ProcessJobs)
+      state.send_event(JobSuccededEvent(state.queue_name, job))
       actor.continue(state)
     }
     ProcessJobs -> {
       let jobs = case
         state.db_adapter.get_next_jobs(
           list.map(state.workers, fn(job) { job.job_name }),
-          2,
+          state.max_concurrent_jobs,
         )
       {
         Ok(jobs) -> jobs
         // Panic and try to restart the service if something goes wrong
-        Error(_) -> panic as "Job store paniced"
+        Error(err) -> {
+          io.debug("hello")
+          state.send_event(QueueErrorEvent(state.queue_name, err))
+          panic as "Job store paniced"
+        }
       }
 
       list.each(jobs, fn(job) {
+        state.send_event(JobReservedEvent(state.queue_name, job))
         case match_worker(state.workers, job) {
           option.Some(worker) -> {
-            run_worker(
-              job,
-              worker,
-              state.db_adapter,
-              state.self,
-              state.max_retries,
-            )
+            run_worker(job, worker, state)
             Nil
           }
           option.None -> {
@@ -470,6 +518,7 @@ fn handle_queue_message(
         }
       })
 
+      actor.send(state.self, LoopPolling)
       actor.continue(state)
     }
   }
@@ -488,25 +537,26 @@ fn match_worker(workers: List(Worker), job: Job) {
   |> option.from_result
 }
 
-fn run_worker(
-  job: Job,
-  worker: Worker,
-  db_adapter: DbAdapter,
-  actor: process.Subject(Message),
-  max_attempts: Int,
-) {
-  case worker.execute(job), job.attempts < max_attempts {
-    Ok(_), _ -> {
-      actor.send(actor, HandleSuccess(job))
-    }
-    Error(_), True -> {
-      let assert Ok(new_job) = db_adapter.increment_attempts(job)
-      run_worker(new_job, worker, db_adapter, actor, max_attempts)
-    }
-    Error(err), False -> {
-      actor.send(actor, HandleError(job, err))
-    }
-  }
+fn run_worker(job: Job, worker: Worker, state: QueueState) {
+  process.start(
+    fn() {
+      state.send_event(JobStartEvent(state.queue_name, job))
+      case worker.execute(job), job.attempts < state.max_retries {
+        Ok(_), _ -> {
+          actor.send(state.self, HandleSuccess(job))
+        }
+        Error(_), True -> {
+          let assert Ok(new_job) = state.db_adapter.increment_attempts(job)
+          run_worker(new_job, worker, state)
+        }
+        Error(err), False -> {
+          actor.send(state.self, HandleError(job, err))
+        }
+      }
+    },
+    False,
+  )
+  Nil
 }
 
 // FFI
