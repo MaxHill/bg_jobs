@@ -3,6 +3,7 @@ import chip
 import gleam/dynamic
 import gleam/erlang/process
 import gleam/json
+import gleam/option
 import gleam/result
 import test_helpers
 
@@ -29,7 +30,7 @@ pub fn dispatch(
   queues: process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
   payload: Payload,
 ) {
-  bg_jobs.enqueue_job(queues, job_name, to_string(payload))
+  bg_jobs.enqueue_job(queues, job_name, to_string(payload), option.None)
 }
 
 pub fn to_string(log_payload: Payload) {

@@ -1,10 +1,13 @@
 import bg_jobs
 import bg_jobs/internal/utils
 import bg_jobs/sqlite_db_adapter
+import birl
+import birl/duration
 import chip
 import gleam/erlang/process
 import gleam/json
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/string
 import gleeunit
@@ -78,7 +81,11 @@ pub fn failing_job_test() {
   use #(queue_store, db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
   let assert Ok(_job) =
-    failing_job.dispatch(queue_store, failing_job.FailingPayload("Failing"))
+    failing_job.dispatch(
+      queue_store,
+      failing_job.FailingPayload("Failing"),
+      option.None,
+    )
 
   // Wait for jobs to process
   process.sleep(100)
@@ -110,6 +117,7 @@ pub fn handle_no_worker_found_test() {
       queue_store,
       "DOES_NOT_EXIST",
       json.to_string(json.string("payload")),
+      option.None,
     )
 
   let assert Ok(_) = log_job.dispatch(queue_store, log_job.Payload("testing"))
@@ -212,6 +220,7 @@ pub fn events_test() {
     failing_job.dispatch(
       queue_store,
       failing_job.FailingPayload("test message"),
+      option.None,
     )
 
   // For logging order let the first event run it's course before
@@ -223,6 +232,7 @@ pub fn events_test() {
       queue_store,
       "DOES_NOT_EXIST",
       json.to_string(json.string("payload")),
+      option.None,
     )
 
   process.sleep(200)
@@ -288,4 +298,31 @@ pub fn handle_abandoned_jobs_test() {
   test_helpers.get_log(logger)
   |> should.equal(["test"])
 }
-// pub fn handle_max_concurrency_test 
+
+pub fn scheduled_job_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+
+  // Dispatch log job and make it available in the future
+  let assert Ok(_) =
+    bg_jobs.enqueue_job(
+      queue_store,
+      log_job.job_name,
+      log_job.to_string(log_job.Payload("test")),
+      birl.now()
+        |> birl.add(duration.seconds(1))
+        |> birl.to_erlang_datetime()
+        |> option.Some,
+    )
+
+  process.sleep(100)
+
+  test_helpers.get_log(logger)
+  |> should.equal([])
+
+  // Wait for test to come available and execute
+  process.sleep(1000)
+
+  test_helpers.get_log(logger)
+  |> should.equal(["test"])
+}

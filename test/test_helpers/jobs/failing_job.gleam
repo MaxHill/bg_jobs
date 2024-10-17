@@ -4,6 +4,7 @@ import gleam/dynamic
 import gleam/erlang/process
 import gleam/int
 import gleam/json
+import gleam/option
 import gleam/result
 import test_helpers
 
@@ -35,8 +36,9 @@ pub fn execute(
 pub fn dispatch(
   queues: process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
   payload: Payload,
+  available_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
 ) {
-  bg_jobs.enqueue_job(queues, job_name, to_string(payload))
+  bg_jobs.enqueue_job(queues, job_name, to_string(payload), available_at)
 }
 
 // Private methods

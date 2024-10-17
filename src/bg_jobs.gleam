@@ -139,7 +139,7 @@ pub fn setup(spec: QueueSupervisorSpec) {
           children
           |> supervisor.add(registry_otp_worker())
           // Add the dispatch worker
-          |> supervisor.add(dispatcher_worker(
+          |> supervisor.add(create_dispatcher_worker(
             spec.db_adapter,
             all_workers,
             spec.event_listners,
@@ -181,7 +181,7 @@ pub fn setup(spec: QueueSupervisorSpec) {
   }
 }
 
-fn dispatcher_worker(
+fn create_dispatcher_worker(
   db_adapter: DbAdapter,
   workers: List(Worker),
   event_listners: List(EventListner),
@@ -248,8 +248,8 @@ pub fn new_queue(
     init: fn() {
       let self = process.new_subject()
 
-      // Cleanup previously in flight jobs
-      let assert Ok(_) = cleanup_in_flight_jobs(queue_name, db_adapter)
+      // Cleanup previously in flight jobs by this queue name
+      let assert Ok(_) = remove_in_flight_jobs(queue_name, db_adapter)
 
       // Register the queue under a name on initialization
       chip.register(
@@ -282,11 +282,11 @@ pub fn new_queue(
       )
     },
     init_timeout: 1000,
-    loop: handle_queue_message,
+    loop: queue_loop,
   ))
 }
 
-fn cleanup_in_flight_jobs(queue_name: String, db_adapter: DbAdapter) {
+fn remove_in_flight_jobs(queue_name: String, db_adapter: DbAdapter) {
   db_adapter.get_running_jobs(queue_name)
   |> result.map(fn(jobs) {
     jobs
@@ -305,11 +305,10 @@ pub fn enqueue_job(
   queues: process.Subject(chip.Message(Message, String, Nil)),
   name: String,
   payload: String,
+  available_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
 ) {
   let assert Ok(queue) = chip.find(queues, "job_dispatcher")
-  process.try_call(queue, EnqueueJob(_, name, payload), 1000)
-  // TODO: propper logging
-  |> result.map_error(fn(e) { io.debug(e) })
+  process.try_call(queue, EnqueueJob(_, name, payload, available_at), 1000)
   |> result.replace_error(DispatchJobError("Call error"))
   |> result.flatten
 }
@@ -357,7 +356,12 @@ pub fn process_jobs(queue) {
 /// ```
 pub type DbAdapter {
   DbAdapter(
-    enqueue_job: fn(String, String) -> Result(Job, BgJobError),
+    enqueue_job: fn(
+      String,
+      String,
+      option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    ) ->
+      Result(Job, BgJobError),
     get_next_jobs: fn(List(String), Int, String) ->
       Result(List(Job), BgJobError),
     release_claim: fn(String) -> Result(Job, BgJobError),
@@ -404,6 +408,7 @@ pub opaque type Message {
     reply_with: process.Subject(Result(Job, BgJobError)),
     name: String,
     payload: String,
+    available_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
   )
   StartPolling
   StopPolling
@@ -429,7 +434,7 @@ pub type QueueState {
   )
 }
 
-fn handle_queue_message(
+fn queue_loop(
   message: Message,
   state: QueueState,
 ) -> actor.Next(Message, QueueState) {
@@ -456,14 +461,14 @@ fn handle_queue_message(
         False -> actor.continue(state)
       }
     }
-    EnqueueJob(client, job_name, payload) -> {
+    EnqueueJob(client, job_name, payload, available_at) -> {
       let has_worker_for_job_name =
         list.map(state.workers, fn(job) { job.job_name })
         |> list.find(fn(name) { name == job_name })
 
       case has_worker_for_job_name {
         Ok(name) -> {
-          let job = state.db_adapter.enqueue_job(name, payload)
+          let job = state.db_adapter.enqueue_job(name, payload, available_at)
           process.send(client, job)
           case job {
             Ok(job) -> state.send_event(JobEnqueuedEvent(job))
@@ -477,8 +482,12 @@ fn handle_queue_message(
               name: job_name,
               payload: payload,
               attempts: 0,
-              created_at: birl.to_erlang_universal_datetime(birl.now()),
-              available_at: birl.to_erlang_universal_datetime(birl.now()),
+              created_at: birl.to_erlang_datetime(birl.now()),
+              available_at: birl.to_erlang_datetime(case available_at {
+                option.Some(timestamp) ->
+                  birl.from_erlang_universal_datetime(timestamp)
+                option.None -> birl.now()
+              }),
               reserved_at: option.None,
               reserved_by: option.None,
             )
