@@ -15,7 +15,7 @@ pub fn queue(queue_name: String, workers: List(bg_jobs.Worker)) {
     workers: workers,
     init_timeout: 100,
     poll_interval: 10,
-    max_concurrent_jobs: 1,
+    max_concurrent_jobs: 4,
   )
 }
 

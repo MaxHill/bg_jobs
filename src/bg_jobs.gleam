@@ -271,6 +271,7 @@ pub fn new_queue(
           is_polling: False,
           max_retries: max_retries,
           max_concurrent_jobs: max_concurrent_jobs,
+          active_jobs: 0,
           self: self,
         )
 
@@ -373,7 +374,6 @@ pub type DbAdapter {
 
 // Event
 //---------------
-
 pub type Event {
   JobEnqueuedEvent(job: Job)
   JobReservedEvent(queue_name: String, job: Job)
@@ -404,17 +404,16 @@ pub opaque type Message {
     reply_with: process.Subject(Result(Job, BgJobError)),
     name: String,
     payload: String,
-    // available_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
   )
   StartPolling
   StopPolling
   LoopPolling
   HandleError(Job, exception: String)
   HandleSuccess(Job)
-  CleanupJobs
   ProcessJobs
 }
 
+// TODO: split state and config
 pub type QueueState {
   QueueState(
     queue_name: String,
@@ -425,6 +424,7 @@ pub type QueueState {
     max_retries: Int,
     max_concurrent_jobs: Int,
     send_event: fn(Event) -> Nil,
+    active_jobs: Int,
     self: process.Subject(Message),
   )
 }
@@ -496,55 +496,60 @@ fn handle_queue_message(
     }
     HandleError(job, exception) -> {
       let assert Ok(_) = state.db_adapter.move_job_to_failed(job, exception)
-      // remove from db
-      // add to failed jobs
       state.send_event(JobFailedEvent(state.queue_name, job))
-      actor.continue(state)
+      actor.continue(QueueState(..state, active_jobs: state.active_jobs - 1))
     }
     HandleSuccess(job) -> {
       let assert Ok(_) = state.db_adapter.move_job_to_succeded(job)
       state.send_event(JobSuccededEvent(state.queue_name, job))
-      actor.continue(state)
-    }
-    CleanupJobs -> {
-      actor.continue(state)
+      actor.continue(QueueState(..state, active_jobs: state.active_jobs - 1))
     }
     ProcessJobs -> {
-      let jobs = case
-        state.db_adapter.get_next_jobs(
-          list.map(state.workers, fn(job) { job.job_name }),
-          state.max_concurrent_jobs,
-          state.queue_name,
-        )
-      {
-        Ok(jobs) -> jobs
-        // Panic and try to restart the service if something goes wrong
-        Error(err) -> {
-          state.send_event(QueueErrorEvent(state.queue_name, err))
-          panic as "Job store paniced"
+      let new_jobs_limit = state.max_concurrent_jobs - state.active_jobs
+      case new_jobs_limit {
+        0 -> {
+          actor.send(state.self, LoopPolling)
+          actor.continue(state)
+        }
+        _ -> {
+          let jobs = case
+            state.db_adapter.get_next_jobs(
+              list.map(state.workers, fn(job) { job.job_name }),
+              new_jobs_limit,
+              state.queue_name,
+            )
+          {
+            Ok(jobs) -> jobs
+            // Panic and try to restart the service if something goes wrong
+            Error(err) -> {
+              state.send_event(QueueErrorEvent(state.queue_name, err))
+              panic as "Job store paniced"
+            }
+          }
+
+          list.each(jobs, fn(job) {
+            state.send_event(JobReservedEvent(state.queue_name, job))
+            case match_worker(state.workers, job) {
+              option.Some(worker) -> {
+                run_worker(job, worker, state)
+                Nil
+              }
+              option.None -> {
+                let assert Ok(_) =
+                  state.db_adapter.move_job_to_failed(
+                    job,
+                    "Could not find worker for job",
+                  )
+                Nil
+              }
+            }
+          })
+
+          let active_jobs = state.active_jobs + list.length(jobs)
+          actor.send(state.self, LoopPolling)
+          actor.continue(QueueState(..state, active_jobs:))
         }
       }
-
-      list.each(jobs, fn(job) {
-        state.send_event(JobReservedEvent(state.queue_name, job))
-        case match_worker(state.workers, job) {
-          option.Some(worker) -> {
-            run_worker(job, worker, state)
-            Nil
-          }
-          option.None -> {
-            let assert Ok(_) =
-              state.db_adapter.move_job_to_failed(
-                job,
-                "Could not find worker for job",
-              )
-            Nil
-          }
-        }
-      })
-
-      actor.send(state.self, LoopPolling)
-      actor.continue(state)
     }
   }
 }
