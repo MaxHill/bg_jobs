@@ -18,6 +18,8 @@ pub fn try_new_store(
   bg_jobs.DbAdapter(
     enqueue_job: enqueue_job(conn, send_event),
     get_next_jobs: get_next_jobs(conn, send_event),
+    release_claim: release_claim(conn, send_event),
+    get_running_jobs: get_running_jobs(conn, send_event),
     move_job_to_succeded: move_job_to_succeded(conn, send_event),
     move_job_to_failed: move_job_to_failed(conn, send_event),
     get_succeeded_jobs: get_succeeded_jobs(conn, send_event),
@@ -28,6 +30,7 @@ pub fn try_new_store(
   )
 }
 
+// Wrapping sqlight.query adding error casting and logging
 fn query(
   send_event: fn(bg_jobs.Event) -> Nil,
   sql: String,
@@ -195,7 +198,7 @@ fn move_job_to_failed(
 }
 
 fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
-  fn(job_names: List(String), limit: Int) {
+  fn(job_names: List(String), limit: Int, queue_id: String) {
     let job_names_sql =
       list.fold(job_names, "", fn(acc, _) {
         list.filter([acc, "?"], fn(l) { !string.is_empty(l) })
@@ -204,7 +207,7 @@ fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
 
     let sql = "
         UPDATE jobs
-           SET reserved_at = CURRENT_TIMESTAMP
+           SET reserved_at = CURRENT_TIMESTAMP, reserved_by = ?
          WHERE id IN (
           SELECT id
             FROM jobs
@@ -217,9 +220,48 @@ fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
       RETURNING *;
     "
     let arguments =
-      list.concat([list.map(job_names, sqlight.text), [sqlight.int(limit)]])
+      list.concat([
+        [sqlight.text(queue_id)],
+        list.map(job_names, sqlight.text),
+        [sqlight.int(limit)],
+      ])
 
     query(send_event, sql, conn, arguments, decode_enqueued_db_row)
+    |> result.map(result.all)
+    |> result.flatten
+  }
+}
+
+fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+  fn(job_id: String) {
+    let sql =
+      "
+        UPDATE jobs
+           SET reserved_at = NULL, reserved_by = NULL
+         WHERE id = ? 
+     RETURNING *;
+    "
+
+    query(send_event, sql, conn, [sqlight.text(job_id)], decode_enqueued_db_row)
+    |> result.try(fn(list) {
+      list.first(list)
+      |> result.replace_error(bg_jobs.UnknownError(
+        "Should never be possible if insert is successfull",
+      ))
+    })
+    |> result.flatten
+  }
+}
+
+fn get_running_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+  fn(queue_id: String) {
+    query(
+      send_event,
+      "SELECT * FROM jobs WHERE reserved_at < CURRENT_TIMESTAMP AND reserved_by = ?",
+      conn,
+      [sqlight.text(queue_id)],
+      decode_enqueued_db_row,
+    )
     |> result.map(result.all)
     |> result.flatten
   }
@@ -293,7 +335,8 @@ pub fn migrate_up(conn: sqlight.Connection) {
       attempts INTEGER NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
       available_at DATETIME DEFAULT CURRENT_TIMESTAMP  NOT NULL,
-      reserved_at DATETIME
+      reserved_at DATETIME,
+      reserved_by TEXT
     );
 
     CREATE TABLE IF NOT EXISTS jobs_failed (
@@ -348,6 +391,7 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
       use created_at_string <- decode.parameter
       use available_at_string <- decode.parameter
       use reserved_at_string <- decode.parameter
+      use reserved_by <- decode.parameter
 
       use created_at <- result.try(
         birl.from_naive(created_at_string)
@@ -377,6 +421,7 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
         created_at,
         available_at,
         reserved_at,
+        reserved_by,
       )
     })
     |> decode.field(0, decode.string)
@@ -386,6 +431,7 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
     |> decode.field(4, decode.string)
     |> decode.field(5, decode.string)
     |> decode.field(6, decode.optional(decode.string))
+    |> decode.field(7, decode.optional(decode.string))
 
   decoder
   |> decode.from(data)

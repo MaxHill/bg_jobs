@@ -9,6 +9,7 @@ import gleam/otp/actor
 import gleam/otp/supervisor
 import gleam/result
 import sqlight
+import youid/uuid
 
 // Errors
 //---------------
@@ -58,6 +59,7 @@ pub type Job {
     created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
     available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
     reserved_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    reserved_by: option.Option(String),
   )
 }
 
@@ -246,12 +248,18 @@ pub fn new_queue(
     init: fn() {
       let self = process.new_subject()
 
+      // Cleanup previously in flight jobs
+      let assert Ok(_) = cleanup_in_flight_jobs(queue_name, db_adapter)
+
       // Register the queue under a name on initialization
       chip.register(
         registry,
         chip.new(self)
           |> chip.tag(queue_name),
       )
+
+      // Start polling directly
+      process.send(self, StartPolling)
 
       let state =
         QueueState(
@@ -277,6 +285,15 @@ pub fn new_queue(
   ))
 }
 
+fn cleanup_in_flight_jobs(queue_name: String, db_adapter: DbAdapter) {
+  db_adapter.get_running_jobs(queue_name)
+  |> result.map(fn(jobs) {
+    jobs
+    |> list.map(fn(job) { job.id })
+    |> list.map(db_adapter.release_claim(_))
+  })
+}
+
 /// Adds a new job to the specified queue.
 ///
 /// ## Example
@@ -289,7 +306,7 @@ pub fn enqueue_job(
   payload: String,
 ) {
   let assert Ok(queue) = chip.find(queues, "job_dispatcher")
-  process.try_call(queue, DispatchJob(_, name, payload), 1000)
+  process.try_call(queue, EnqueueJob(_, name, payload), 1000)
   // TODO: propper logging
   |> result.map_error(fn(e) { io.debug(e) })
   |> result.replace_error(DispatchJobError("Call error"))
@@ -340,11 +357,14 @@ pub fn process_jobs(queue) {
 pub type DbAdapter {
   DbAdapter(
     enqueue_job: fn(String, String) -> Result(Job, BgJobError),
-    get_next_jobs: fn(List(String), Int) -> Result(List(Job), BgJobError),
+    get_next_jobs: fn(List(String), Int, String) ->
+      Result(List(Job), BgJobError),
+    release_claim: fn(String) -> Result(Job, BgJobError),
     move_job_to_succeded: fn(Job) -> Result(Nil, BgJobError),
     move_job_to_failed: fn(Job, String) -> Result(Nil, BgJobError),
     get_succeeded_jobs: fn(Int) -> Result(List(SucceededJob), BgJobError),
     get_failed_jobs: fn(Int) -> Result(List(FailedJob), BgJobError),
+    get_running_jobs: fn(String) -> Result(List(Job), BgJobError),
     increment_attempts: fn(Job) -> Result(Job, BgJobError),
     migrate_up: fn() -> Result(Nil, BgJobError),
     migrate_down: fn() -> Result(Nil, BgJobError),
@@ -380,16 +400,18 @@ pub fn send_event(event_listners: List(EventListner), event: Event) {
 //---------------
 
 pub opaque type Message {
-  DispatchJob(
+  EnqueueJob(
     reply_with: process.Subject(Result(Job, BgJobError)),
     name: String,
     payload: String,
+    // available_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
   )
   StartPolling
   StopPolling
   LoopPolling
   HandleError(Job, exception: String)
   HandleSuccess(Job)
+  CleanupJobs
   ProcessJobs
 }
 
@@ -434,12 +456,12 @@ fn handle_queue_message(
         False -> actor.continue(state)
       }
     }
-    DispatchJob(client, job_name, payload) -> {
-      let worker_job_name =
+    EnqueueJob(client, job_name, payload) -> {
+      let has_worker_for_job_name =
         list.map(state.workers, fn(job) { job.job_name })
         |> list.find(fn(name) { name == job_name })
 
-      case worker_job_name {
+      case has_worker_for_job_name {
         Ok(name) -> {
           let job = state.db_adapter.enqueue_job(name, payload)
           process.send(client, job)
@@ -451,13 +473,14 @@ fn handle_queue_message(
         Error(_) -> {
           let job =
             Job(
-              id: "",
+              id: uuid.v4_string(),
               name: job_name,
               payload: payload,
               attempts: 0,
               created_at: birl.to_erlang_universal_datetime(birl.now()),
               available_at: birl.to_erlang_universal_datetime(birl.now()),
               reserved_at: option.None,
+              reserved_by: option.None,
             )
           actor.send(
             state.self,
@@ -479,9 +502,11 @@ fn handle_queue_message(
       actor.continue(state)
     }
     HandleSuccess(job) -> {
-      // Panic and try to restart the service if something goes wrong
       let assert Ok(_) = state.db_adapter.move_job_to_succeded(job)
       state.send_event(JobSuccededEvent(state.queue_name, job))
+      actor.continue(state)
+    }
+    CleanupJobs -> {
       actor.continue(state)
     }
     ProcessJobs -> {
@@ -489,12 +514,12 @@ fn handle_queue_message(
         state.db_adapter.get_next_jobs(
           list.map(state.workers, fn(job) { job.job_name }),
           state.max_concurrent_jobs,
+          state.queue_name,
         )
       {
         Ok(jobs) -> jobs
         // Panic and try to restart the service if something goes wrong
         Error(err) -> {
-          io.debug("hello")
           state.send_event(QueueErrorEvent(state.queue_name, err))
           panic as "Job store paniced"
         }
@@ -558,18 +583,3 @@ fn run_worker(job: Job, worker: Worker, state: QueueState) {
   )
   Nil
 }
-
-// FFI
-//---------------
-
-/// Extracts the name of type from the constructor.
-///
-@external(erlang, "bg_jobs_ffi", "queue_type_name_to_string")
-pub fn queue_type_name_to_string(
-  varfn: fn(process.Subject(msg)) -> wrap,
-) -> String
-
-/// Extracts the name of type from the constructor.
-///
-@external(erlang, "bg_jobs_ffi", "function_name_to_string")
-pub fn function_name_to_string(fun: fn(any) -> something) -> String

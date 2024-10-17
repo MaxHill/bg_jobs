@@ -55,8 +55,6 @@ pub fn setup(
     )
   let assert Ok(_default_queue) = chip.find(registry, "default_queue")
 
-  bg_jobs.start_processing_all(registry)
-
   f(#(registry, db_adapter, logger, event_logger))
 
   // Cleanup

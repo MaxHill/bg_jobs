@@ -1,4 +1,5 @@
 import bg_jobs
+import bg_jobs/internal/utils
 import bg_jobs/sqlite_db_adapter
 import chip
 import gleam/erlang/process
@@ -13,6 +14,7 @@ import test_helpers
 import test_helpers/jobs
 import test_helpers/jobs/failing_job
 import test_helpers/jobs/log_job
+import youid/uuid
 
 pub fn main() {
   gleeunit.main()
@@ -138,7 +140,7 @@ pub fn keep_going_after_panic_test() {
   let bad_adapter =
     bg_jobs.DbAdapter(
       ..sqlite_db_adapter.try_new_store(conn, []),
-      get_next_jobs: fn(_, _) { panic as "test panic" },
+      get_next_jobs: fn(_, _, _) { panic as "test panic" },
     )
   let assert Ok(_) = bad_adapter.migrate_down()
   let assert Ok(_) = bad_adapter.migrate_up()
@@ -248,3 +250,42 @@ pub fn events_test() {
     by: string.compare,
   ))
 }
+
+pub fn handle_abandoned_jobs_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+
+  // This job is abandoned since it has reserved_at & _by. 
+  // It will not be picked up by any queue
+  let assert Ok(_) =
+    sqlight.query(
+      "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
+      VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '2023-01-01 00:00:00', ?)
+      RETURNING *;",
+      conn,
+      [
+        sqlight.text(uuid.v4_string()),
+        sqlight.text(log_job.job_name),
+        sqlight.text(log_job.to_string(log_job.Payload("test"))),
+        sqlight.text("default_queue"),
+      ],
+      utils.discard_decode,
+    )
+
+  let assert Ok(queue) = chip.find(queue_store, "default_queue")
+
+  process.kill(process.subject_owner(queue))
+
+  // Wait for kill to happen
+  process.sleep(100)
+
+  let assert Ok(new_queue) = chip.find(queue_store, "default_queue")
+  new_queue |> should.not_equal(queue)
+
+  // Give time to pick it up
+  process.sleep(1000)
+
+  test_helpers.get_log(logger)
+  |> should.equal(["test"])
+}
+// pub fn handle_max_concurrency_test 

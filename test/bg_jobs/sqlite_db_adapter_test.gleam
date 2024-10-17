@@ -1,7 +1,9 @@
 import bg_jobs
+import bg_jobs/internal/utils
 import bg_jobs/sqlite_db_adapter
 import birl
 import gleam/dynamic
+import gleam/erlang/process
 import gleam/list
 import gleam/order
 import gleeunit/should
@@ -54,17 +56,17 @@ pub fn get_next_jobs_limit_test() {
 
   let assert Ok(_returned_job2) = job_store.enqueue_job(job_name, job_payload)
 
-  job_store.get_next_jobs([job_name], 1)
+  job_store.get_next_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.get_next_jobs([job_name], 1)
+  job_store.get_next_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.get_next_jobs([job_name], 1)
+  job_store.get_next_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(0)
@@ -78,7 +80,7 @@ pub fn get_next_jobs_returned_test() {
 
   let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
 
-  job_store.get_next_jobs([job_name], 1)
+  job_store.get_next_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.first
   |> should.be_ok
@@ -87,6 +89,10 @@ pub fn get_next_jobs_returned_test() {
 
     job.reserved_at
     |> should.be_some
+
+    job.reserved_by
+    |> should.be_some
+    |> should.equal("default_queue")
   }
 }
 
@@ -319,7 +325,7 @@ pub fn empty_list_of_jobs_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  job_store.get_next_jobs(["job_name"], 3)
+  job_store.get_next_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
@@ -334,7 +340,7 @@ pub fn multiple_list_of_jobs_test() {
   let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
   let assert Ok(_) = job_store.enqueue_job(job_name, job_payload)
 
-  job_store.get_next_jobs(["job_name"], 3)
+  job_store.get_next_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
@@ -352,7 +358,7 @@ pub fn db_events_test() {
   let assert Ok(_) = job_store.enqueue_job("test_job_2", "test_payaload_2")
 
   let job_1 =
-    job_store.get_next_jobs(["test_job_1"], 1)
+    job_store.get_next_jobs(["test_job_1"], 1, "default_queue")
     |> should.be_ok
     |> list.first
     |> should.be_ok
@@ -363,7 +369,7 @@ pub fn db_events_test() {
   let assert Ok(_) = job_store.get_succeeded_jobs(1)
 
   let job_2 =
-    job_store.get_next_jobs(["test_job_2"], 1)
+    job_store.get_next_jobs(["test_job_2"], 1, "default_queue")
     |> should.be_ok
     |> list.first
     |> should.be_ok
@@ -381,6 +387,42 @@ pub fn db_events_test() {
   test_helpers.get_log(event_logger)
   |> list.length()
   |> should.equal(22)
+}
+
+pub fn release_claim_test() {
+  let event_logger = test_helpers.new_logger()
+  use conn <- sqlight.with_connection(":memory:")
+  let job_store =
+    sqlite_db_adapter.try_new_store(conn, [
+      test_helpers.new_logger_event_listner(event_logger, _),
+    ])
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
+
+  let assert Ok(_) =
+    sqlight.query(
+      "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
+      VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '2023-01-01 00:00:00', ?)
+      RETURNING *;",
+      conn,
+      [
+        sqlight.text("test_id"),
+        sqlight.text("test_job"),
+        sqlight.text("test"),
+        sqlight.text("default_queue"),
+      ],
+      utils.discard_decode,
+    )
+
+  job_store.release_claim("test_id")
+  |> should.be_ok
+
+  process.sleep(100)
+
+  job_store.get_next_jobs(["test_job"], 1, "default_queue")
+  |> should.be_ok()
+  |> list.first
+  |> should.be_ok
 }
 
 // Helpers
