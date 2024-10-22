@@ -12,7 +12,7 @@ import youid/uuid
 
 pub fn try_new_store(
   conn: sqlight.Connection,
-  event_listners: List(bg_jobs.EventListner),
+  event_listners: List(bg_jobs.EventListener),
 ) {
   let send_event = bg_jobs.send_event(event_listners, _)
   bg_jobs.DbAdapter(
@@ -56,7 +56,7 @@ fn query(
 
 fn move_job_to_succeded(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListner,
+  send_event: bg_jobs.EventListener,
 ) {
   fn(job: bg_jobs.Job) {
     use _ <- result.try(query(
@@ -104,7 +104,7 @@ fn move_job_to_succeded(
 
 fn get_succeeded_jobs(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListner,
+  send_event: bg_jobs.EventListener,
 ) {
   fn(limit: Int) {
     query(
@@ -123,7 +123,7 @@ fn get_succeeded_jobs(
   }
 }
 
-fn get_failed_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+fn get_failed_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   fn(limit: Int) {
     query(
       send_event,
@@ -143,7 +143,7 @@ fn get_failed_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
 
 fn move_job_to_failed(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListner,
+  send_event: bg_jobs.EventListener,
 ) {
   fn(job: bg_jobs.Job, exception: String) {
     let sql =
@@ -197,7 +197,7 @@ fn move_job_to_failed(
   }
 }
 
-fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     let now =
       birl.now()
@@ -236,7 +236,7 @@ fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
   }
 }
 
-fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   fn(job_id: String) {
     let sql =
       "
@@ -257,7 +257,7 @@ fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
   }
 }
 
-fn get_running_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+fn get_running_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   fn(queue_id: String) {
     query(
       send_event,
@@ -273,7 +273,7 @@ fn get_running_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListner) 
 
 fn increment_attempts(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListner,
+  send_event: bg_jobs.EventListener,
 ) {
   fn(job: bg_jobs.Job) {
     query(
@@ -298,19 +298,14 @@ fn increment_attempts(
   }
 }
 
-fn enqueue_job(conn: sqlight.Connection, send_event: bg_jobs.EventListner) {
+fn enqueue_job(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   fn(
     job_name: String,
     payload: String,
-    avaliable_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    avaliable_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   ) {
     let avaliable_at =
-      case avaliable_at {
-        option.Some(timestamp) -> birl.from_erlang_universal_datetime(timestamp)
-        option.None -> {
-          birl.now()
-        }
-      }
+      birl.from_erlang_universal_datetime(avaliable_at)
       |> birl.to_iso8601()
 
     let sql =

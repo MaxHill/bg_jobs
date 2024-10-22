@@ -4,7 +4,6 @@ import gleam/dynamic
 import gleam/erlang/process
 import gleam/int
 import gleam/json
-import gleam/option
 import gleam/result
 import test_helpers
 
@@ -34,11 +33,12 @@ pub fn execute(
 }
 
 pub fn dispatch(
-  queues: process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
+  queue_repository: process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
   payload: Payload,
-  available_at: option.Option(#(#(Int, Int, Int), #(Int, Int, Int))),
 ) {
-  bg_jobs.enqueue_job(queues, job_name, to_string(payload), available_at)
+  bg_jobs.new_job(job_name, to_string(payload))
+  |> bg_jobs.job_with_availability(bg_jobs.AvailableNow)
+  |> bg_jobs.enqueue_job(queue_repository)
 }
 
 // Private methods

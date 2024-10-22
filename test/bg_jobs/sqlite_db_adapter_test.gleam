@@ -5,9 +5,7 @@ import birl
 import birl/duration
 import gleam/dynamic
 import gleam/erlang/process
-import gleam/io
 import gleam/list
-import gleam/option
 import gleam/order
 import gleeunit/should
 import sqlight
@@ -24,7 +22,11 @@ pub fn enqueue_job_test() {
   let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(returned_job) =
-    job_store.enqueue_job(job_name, job_payload, option.None)
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   process.sleep(100)
 
@@ -59,10 +61,18 @@ pub fn get_next_jobs_limit_test() {
   let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_returned_job1) =
-    job_store.enqueue_job(job_name, job_payload, option.None)
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   let assert Ok(_returned_job2) =
-    job_store.enqueue_job(job_name, job_payload, option.None)
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   process.sleep(1000)
   sqlight.query(
@@ -98,7 +108,12 @@ pub fn get_next_jobs_returned_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload, option.None)
+  let assert Ok(_) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   job_store.get_next_jobs([job_name], 1, "default_queue")
   |> should.be_ok
@@ -122,7 +137,12 @@ pub fn move_job_to_success_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(job) = job_store.enqueue_job(job_name, job_payload, option.None)
+  let assert Ok(job) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   job_store.move_job_to_succeded(job)
   |> should.be_ok
@@ -164,7 +184,12 @@ pub fn move_job_to_failed_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(job) = job_store.enqueue_job(job_name, job_payload, option.None)
+  let assert Ok(job) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   job_store.move_job_to_failed(job, "test exception")
   |> should.be_ok
@@ -300,7 +325,12 @@ pub fn increment_attempts_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(job) = job_store.enqueue_job(job_name, job_payload, option.None)
+  let assert Ok(job) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_datetime(),
+    )
 
   job_store.increment_attempts(job)
   |> should.be_ok
@@ -355,10 +385,30 @@ pub fn multiple_list_of_jobs_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload, option.None)
-  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload, option.None)
-  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload, option.None)
-  let assert Ok(_) = job_store.enqueue_job(job_name, job_payload, option.None)
+  let assert Ok(_) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_universal_datetime(),
+    )
+  let assert Ok(_) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_universal_datetime(),
+    )
+  let assert Ok(_) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_universal_datetime(),
+    )
+  let assert Ok(_) =
+    job_store.enqueue_job(
+      job_name,
+      job_payload,
+      birl.now() |> birl.to_erlang_universal_datetime(),
+    )
 
   job_store.get_next_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
@@ -375,9 +425,17 @@ pub fn db_events_test() {
   let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_) =
-    job_store.enqueue_job("test_job_1", "test_payaload_1", option.None)
+    job_store.enqueue_job(
+      "test_job_1",
+      "test_payaload_1",
+      birl.now() |> birl.to_erlang_universal_datetime(),
+    )
   let assert Ok(_) =
-    job_store.enqueue_job("test_job_2", "test_payaload_2", option.None)
+    job_store.enqueue_job(
+      "test_job_2",
+      "test_payaload_2",
+      birl.now() |> birl.to_erlang_universal_datetime(),
+    )
 
   let job_1 =
     job_store.get_next_jobs(["test_job_1"], 1, "default_queue")
@@ -461,11 +519,9 @@ pub fn scheduled_job_test() {
     job_store.enqueue_job(
       "test_job",
       "test_payaload",
-      option.Some(
-        birl.now()
+      birl.now()
         |> birl.add(duration.seconds(2))
         |> birl.to_erlang_datetime(),
-      ),
     )
 
   process.sleep(200)

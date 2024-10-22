@@ -1,13 +1,10 @@
 import bg_jobs
 import bg_jobs/internal/utils
 import bg_jobs/sqlite_db_adapter
-import birl
-import birl/duration
 import chip
 import gleam/erlang/process
 import gleam/json
 import gleam/list
-import gleam/option
 import gleam/result
 import gleam/string
 import gleeunit
@@ -81,11 +78,7 @@ pub fn failing_job_test() {
   use #(queue_store, db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
   let assert Ok(_job) =
-    failing_job.dispatch(
-      queue_store,
-      failing_job.FailingPayload("Failing"),
-      option.None,
-    )
+    failing_job.dispatch(queue_store, failing_job.FailingPayload("Failing"))
 
   // Wait for jobs to process
   process.sleep(100)
@@ -114,10 +107,12 @@ pub fn handle_no_worker_found_test() {
 
   let assert Error(_) =
     bg_jobs.enqueue_job(
+      bg_jobs.JobEnqueueRequest(
+        "DOES_NOT_EXIST",
+        json.to_string(json.string("payload")),
+        bg_jobs.AvailableNow,
+      ),
       queue_store,
-      "DOES_NOT_EXIST",
-      json.to_string(json.string("payload")),
-      option.None,
     )
 
   let assert Ok(_) = log_job.dispatch(queue_store, log_job.Payload("testing"))
@@ -155,24 +150,13 @@ pub fn keep_going_after_panic_test() {
   let logger = test_helpers.new_logger()
 
   let assert Ok(#(_sup, queues)) =
-    bg_jobs.setup(
-      bg_jobs.QueueSupervisorSpec(
-        max_frequency: 1,
-        frequency_period: 1,
-        db_adapter: bad_adapter,
-        event_listners: [],
-        queues: [
-          bg_jobs.QueueSpec(
-            name: "default_queue",
-            workers: [log_job.worker(logger)],
-            max_retries: 3,
-            init_timeout: 100,
-            poll_interval: 100,
-            max_concurrent_jobs: 2,
-          ),
-        ],
-      ),
+    bg_jobs.new(bad_adapter)
+    |> bg_jobs.add_queue(
+      bg_jobs.new_queue("default_queue")
+      |> bg_jobs.queue_add_worker(log_job.worker(logger)),
     )
+    |> bg_jobs.create()
+
   let assert Ok(queue) = chip.find(queues, "default_queue")
   let assert Ok(_job) =
     log_job.dispatch(queues, log_job.Payload("test message"))
@@ -220,7 +204,6 @@ pub fn events_test() {
     failing_job.dispatch(
       queue_store,
       failing_job.FailingPayload("test message"),
-      option.None,
     )
 
   // For logging order let the first event run it's course before
@@ -229,10 +212,12 @@ pub fn events_test() {
 
   let assert Error(_) =
     bg_jobs.enqueue_job(
+      bg_jobs.JobEnqueueRequest(
+        "DOES_NOT_EXIST",
+        json.to_string(json.string("payload")),
+        bg_jobs.AvailableNow,
+      ),
       queue_store,
-      "DOES_NOT_EXIST",
-      json.to_string(json.string("payload")),
-      option.None,
     )
 
   process.sleep(200)
@@ -306,13 +291,12 @@ pub fn scheduled_job_test() {
   // Dispatch log job and make it available in the future
   let assert Ok(_) =
     bg_jobs.enqueue_job(
+      bg_jobs.JobEnqueueRequest(
+        log_job.job_name,
+        log_job.to_string(log_job.Payload("test")),
+        bg_jobs.AvailableIn(1000),
+      ),
       queue_store,
-      log_job.job_name,
-      log_job.to_string(log_job.Payload("test")),
-      birl.now()
-        |> birl.add(duration.seconds(1))
-        |> birl.to_erlang_datetime()
-        |> option.Some,
     )
 
   process.sleep(100)
@@ -326,3 +310,73 @@ pub fn scheduled_job_test() {
   test_helpers.get_log(logger)
   |> should.equal(["test"])
 }
+
+pub fn builder_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  let db_adapter = sqlite_db_adapter.try_new_store(conn, [])
+  let test_event_listener = fn(_: bg_jobs.Event) { Nil }
+  let test_queue_spec =
+    bg_jobs.QueueSpec(
+      name: "test_queue",
+      workers: [],
+      event_listeners: [],
+      max_retries: 0,
+      init_timeout: 0,
+      max_concurrent_jobs: 0,
+      poll_interval: 0,
+    )
+
+  let spec =
+    bg_jobs.new(db_adapter)
+    |> bg_jobs.with_supervisor_max_frequency(10)
+    |> bg_jobs.with_supervisor_frequency_period(10)
+    |> bg_jobs.add_event_listener(test_event_listener)
+    |> bg_jobs.add_queue(test_queue_spec)
+
+  let spec2 =
+    bg_jobs.new(db_adapter)
+    |> bg_jobs.add_event_listener(test_event_listener)
+    |> bg_jobs.add_queue(test_queue_spec)
+    |> bg_jobs.add_event_listener(test_event_listener)
+    |> bg_jobs.add_queue(test_queue_spec)
+
+  spec.max_frequency |> should.equal(10)
+  spec.frequency_period |> should.equal(10)
+  spec.db_adapter |> should.equal(db_adapter)
+  spec.event_listeners |> should.equal([test_event_listener])
+  spec.queues |> should.equal([test_queue_spec])
+
+  spec2.event_listeners
+  |> should.equal([test_event_listener, test_event_listener])
+  spec2.queues |> should.equal([test_queue_spec, test_queue_spec])
+}
+// pub fn build_queue_test() {
+//   use conn <- sqlight.with_connection(":memory:")
+//   let db_adapter = sqlite_db_adapter.try_new_store(conn, [])
+//   let test_event_listener = fn(_: bg_jobs.Event) { Nil }
+//   let test_worker = fn(_, _) { Ok(Nil) }
+//
+//   let spec =
+//     bg_jobs.new_queue("test_queue")
+//     |> bg_jobs.with_supervisor_max_frequency(10)
+//     |> bg_jobs.with_supervisor_frequency_period(10)
+//     |> bg_jobs.add_event_listener(test_event_listener)
+//     |> bg_jobs.add_queue(test_queue_spec)
+//
+//   let spec2 =
+//     bg_jobs.new(db_adapter)
+//     |> bg_jobs.add_event_listener(test_event_listener)
+//     |> bg_jobs.add_queue(test_queue_spec)
+//     |> bg_jobs.add_event_listener(test_event_listener)
+//     |> bg_jobs.add_queue(test_queue_spec)
+//
+//   spec.max_frequency |> should.equal(10)
+//   spec.frequency_period |> should.equal(10)
+//   spec.db_adapter |> should.equal(db_adapter)
+//   spec.event_listeners |> should.equal([test_event_listener])
+//   spec.queues |> should.equal([test_queue_spec])
+//
+//   spec2.event_listeners
+//   |> should.equal([test_event_listener, test_event_listener])
+//   spec2.queues |> should.equal([test_queue_spec, test_queue_spec])
+// }
