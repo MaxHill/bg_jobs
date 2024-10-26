@@ -54,7 +54,7 @@ pub fn enqueue_job_test() {
   }
 }
 
-pub fn get_next_jobs_limit_test() {
+pub fn claim_jobs_limit_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.try_new_store(conn, [fn(_) { Nil }])
   let assert Ok(_) = job_store.migrate_down()
@@ -86,23 +86,23 @@ pub fn get_next_jobs_limit_test() {
   |> should.be_ok
   |> should.be_ok
 
-  job_store.get_next_jobs([job_name], 1, "default_queue")
+  job_store.claim_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.get_next_jobs([job_name], 1, "default_queue")
+  job_store.claim_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.get_next_jobs([job_name], 1, "default_queue")
+  job_store.claim_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(0)
 }
 
-pub fn get_next_jobs_returned_test() {
+pub fn claim_jobs_returned_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.try_new_store(conn, [fn(_) { Nil }])
   let assert Ok(_) = job_store.migrate_down()
@@ -115,7 +115,7 @@ pub fn get_next_jobs_returned_test() {
       birl.now() |> birl.to_erlang_datetime(),
     )
 
-  job_store.get_next_jobs([job_name], 1, "default_queue")
+  job_store.claim_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.first
   |> should.be_ok
@@ -375,7 +375,7 @@ pub fn empty_list_of_jobs_test() {
   let assert Ok(_) = job_store.migrate_down()
   let assert Ok(_) = job_store.migrate_up()
 
-  job_store.get_next_jobs(["job_name"], 3, "default_queue")
+  job_store.claim_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
@@ -410,7 +410,7 @@ pub fn multiple_list_of_jobs_test() {
       birl.now() |> birl.to_erlang_universal_datetime(),
     )
 
-  job_store.get_next_jobs(["job_name"], 3, "default_queue")
+  job_store.claim_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
@@ -438,7 +438,7 @@ pub fn db_events_test() {
     )
 
   let job_1 =
-    job_store.get_next_jobs(["test_job_1"], 1, "default_queue")
+    job_store.claim_jobs(["test_job_1"], 1, "default_queue")
     |> should.be_ok
     |> list.first
     |> should.be_ok
@@ -449,7 +449,7 @@ pub fn db_events_test() {
   let assert Ok(_) = job_store.get_succeeded_jobs(1)
 
   let job_2 =
-    job_store.get_next_jobs(["test_job_2"], 1, "default_queue")
+    job_store.claim_jobs(["test_job_2"], 1, "default_queue")
     |> should.be_ok
     |> list.first
     |> should.be_ok
@@ -499,7 +499,7 @@ pub fn release_claim_test() {
 
   process.sleep(100)
 
-  job_store.get_next_jobs(["test_job"], 1, "default_queue")
+  job_store.claim_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok()
   |> list.first
   |> should.be_ok
@@ -526,14 +526,14 @@ pub fn scheduled_job_test() {
 
   process.sleep(200)
 
-  job_store.get_next_jobs(["test_job"], 1, "default_queue")
+  job_store.claim_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok
   |> should.equal([])
 
   // Wait for it to become available
   process.sleep(2000)
 
-  job_store.get_next_jobs(["test_job"], 1, "default_queue")
+  job_store.claim_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok
   |> list.map(fn(job) { job.name })
   |> should.equal(["test_job"])

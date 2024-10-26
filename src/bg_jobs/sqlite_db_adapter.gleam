@@ -17,7 +17,7 @@ pub fn try_new_store(
   let send_event = bg_jobs.send_event(event_listners, _)
   bg_jobs.DbAdapter(
     enqueue_job: enqueue_job(conn, send_event),
-    get_next_jobs: get_next_jobs(conn, send_event),
+    claim_jobs: claim_jobs(conn, send_event),
     release_claim: release_claim(conn, send_event),
     get_running_jobs: get_running_jobs(conn, send_event),
     move_job_to_succeded: move_job_to_succeded(conn, send_event),
@@ -197,7 +197,7 @@ fn move_job_to_failed(
   }
 }
 
-fn get_next_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
+fn claim_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     let now =
       birl.now()

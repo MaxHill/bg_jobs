@@ -22,13 +22,12 @@ pub fn main() {
 
 pub fn single_job_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
-  let assert Ok(_job) =
-    log_job.dispatch(queue_store, log_job.Payload("test message"))
+  let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
 
   // Wait for jobs to process
-  process.sleep(50)
+  process.sleep(200)
 
   test_helpers.get_log(logger)
   |> should.equal(["test message"])
@@ -36,10 +35,9 @@ pub fn single_job_test() {
 
 pub fn job_is_moved_to_success_after_succeeding_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, db_adapter, _logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, db_adapter, _logger, _event_logger) <- jobs.setup(conn)
 
-  let assert Ok(_job) =
-    log_job.dispatch(queue_store, log_job.Payload("test message 1"))
+  let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message 1"))
 
   // Wait for jobs to process
   process.sleep(50)
@@ -54,8 +52,8 @@ pub fn job_is_moved_to_success_after_succeeding_test() {
 
 pub fn process_muliptle_jobs_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
-  let dispatch = log_job.dispatch(queue_store, _)
+  use #(bg, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  let dispatch = log_job.dispatch(bg, _)
 
   let assert Ok(_) = dispatch(log_job.Payload("test message 1"))
   let assert Ok(_) = dispatch(log_job.Payload("test message 2"))
@@ -75,10 +73,10 @@ pub fn process_muliptle_jobs_test() {
 
 pub fn failing_job_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
   let assert Ok(_job) =
-    failing_job.dispatch(queue_store, failing_job.FailingPayload("Failing"))
+    failing_job.dispatch(bg, failing_job.FailingPayload("Failing"))
 
   // Wait for jobs to process
   process.sleep(100)
@@ -103,7 +101,7 @@ pub fn failing_job_test() {
 
 pub fn handle_no_worker_found_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
   let assert Error(_) =
     bg_jobs.enqueue_job(
@@ -112,10 +110,10 @@ pub fn handle_no_worker_found_test() {
         json.to_string(json.string("payload")),
         bg_jobs.AvailableNow,
       ),
-      queue_store,
+      bg,
     )
 
-  let assert Ok(_) = log_job.dispatch(queue_store, log_job.Payload("testing"))
+  let assert Ok(_) = log_job.dispatch(bg, log_job.Payload("testing"))
 
   // Wait for jobs to process
   process.sleep(50)
@@ -143,13 +141,13 @@ pub fn keep_going_after_panic_test() {
   let bad_adapter =
     bg_jobs.DbAdapter(
       ..sqlite_db_adapter.try_new_store(conn, []),
-      get_next_jobs: fn(_, _, _) { panic as "test panic" },
+      claim_jobs: fn(_, _, _) { panic as "test panic" },
     )
   let assert Ok(_) = bad_adapter.migrate_down()
   let assert Ok(_) = bad_adapter.migrate_up()
   let logger = test_helpers.new_logger()
 
-  let assert Ok(#(_sup, queues)) =
+  let assert Ok(bg) =
     bg_jobs.new(bad_adapter)
     |> bg_jobs.add_queue(
       bg_jobs.new_queue("default_queue")
@@ -157,30 +155,28 @@ pub fn keep_going_after_panic_test() {
     )
     |> bg_jobs.create()
 
-  let assert Ok(queue) = chip.find(queues, "default_queue")
-  let assert Ok(_job) =
-    log_job.dispatch(queues, log_job.Payload("test message"))
+  let assert Ok(queue) = chip.find(bg.queue_registry, "default_queue")
+  let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
 
   // Wait for restart
-  bg_jobs.start_processing_all(queues)
+  bg_jobs.start_processing_all(bg)
   process.sleep(300)
 
-  let assert Ok(restarted_queue) = chip.find(queues, "default_queue")
+  let assert Ok(restarted_queue) = chip.find(bg.queue_registry, "default_queue")
 
   restarted_queue
   |> should.not_equal(queue)
 
-  bg_jobs.stop_processing_all(queues)
+  bg_jobs.stop_processing_all(bg)
   // Give it time to stop polling before connection closes
   process.sleep(100)
 }
 
 pub fn polling_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
-  let assert Ok(_job) =
-    log_job.dispatch(queue_store, log_job.Payload("test message"))
+  let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
 
   // Wait for jobs to process
   process.sleep(50)
@@ -191,20 +187,16 @@ pub fn polling_test() {
 
 pub fn events_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, _db_adapter, _logger, event_logger) <- jobs.setup(conn)
+  use #(bg, _db_adapter, _logger, event_logger) <- jobs.setup(conn)
 
-  let assert Ok(_job) =
-    log_job.dispatch(queue_store, log_job.Payload("test message"))
+  let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
 
   // For logging order let the first event run it's course before
   // starting the next 
   process.sleep(200)
 
   let assert Ok(_job) =
-    failing_job.dispatch(
-      queue_store,
-      failing_job.FailingPayload("test message"),
-    )
+    failing_job.dispatch(bg, failing_job.FailingPayload("test message"))
 
   // For logging order let the first event run it's course before
   // starting the next 
@@ -217,7 +209,7 @@ pub fn events_test() {
         json.to_string(json.string("payload")),
         bg_jobs.AvailableNow,
       ),
-      queue_store,
+      bg,
     )
 
   process.sleep(200)
@@ -248,7 +240,7 @@ pub fn events_test() {
 
 pub fn handle_abandoned_jobs_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
   // This job is abandoned since it has reserved_at & _by. 
   // It will not be picked up by any queue
@@ -267,14 +259,14 @@ pub fn handle_abandoned_jobs_test() {
       utils.discard_decode,
     )
 
-  let assert Ok(queue) = chip.find(queue_store, "default_queue")
+  let assert Ok(queue) = chip.find(bg.queue_registry, "default_queue")
 
   process.kill(process.subject_owner(queue))
 
   // Wait for kill to happen
   process.sleep(100)
 
-  let assert Ok(new_queue) = chip.find(queue_store, "default_queue")
+  let assert Ok(new_queue) = chip.find(bg.queue_registry, "default_queue")
   new_queue |> should.not_equal(queue)
 
   // Give time to pick it up
@@ -286,7 +278,7 @@ pub fn handle_abandoned_jobs_test() {
 
 pub fn scheduled_job_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(queue_store, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
+  use #(bg, _db_adapter, logger, _event_logger) <- jobs.setup(conn)
 
   // Dispatch log job and make it available in the future
   let assert Ok(_) =
@@ -296,7 +288,7 @@ pub fn scheduled_job_test() {
         log_job.to_string(log_job.Payload("test")),
         bg_jobs.AvailableIn(1000),
       ),
-      queue_store,
+      bg,
     )
 
   process.sleep(100)
@@ -350,33 +342,65 @@ pub fn builder_test() {
   |> should.equal([test_event_listener, test_event_listener])
   spec2.queues |> should.equal([test_queue_spec, test_queue_spec])
 }
-// pub fn build_queue_test() {
-//   use conn <- sqlight.with_connection(":memory:")
-//   let db_adapter = sqlite_db_adapter.try_new_store(conn, [])
-//   let test_event_listener = fn(_: bg_jobs.Event) { Nil }
-//   let test_worker = fn(_, _) { Ok(Nil) }
-//
-//   let spec =
-//     bg_jobs.new_queue("test_queue")
-//     |> bg_jobs.with_supervisor_max_frequency(10)
-//     |> bg_jobs.with_supervisor_frequency_period(10)
-//     |> bg_jobs.add_event_listener(test_event_listener)
-//     |> bg_jobs.add_queue(test_queue_spec)
-//
-//   let spec2 =
-//     bg_jobs.new(db_adapter)
-//     |> bg_jobs.add_event_listener(test_event_listener)
-//     |> bg_jobs.add_queue(test_queue_spec)
-//     |> bg_jobs.add_event_listener(test_event_listener)
-//     |> bg_jobs.add_queue(test_queue_spec)
-//
-//   spec.max_frequency |> should.equal(10)
-//   spec.frequency_period |> should.equal(10)
-//   spec.db_adapter |> should.equal(db_adapter)
-//   spec.event_listeners |> should.equal([test_event_listener])
-//   spec.queues |> should.equal([test_queue_spec])
-//
-//   spec2.event_listeners
-//   |> should.equal([test_event_listener, test_event_listener])
-//   spec2.queues |> should.equal([test_queue_spec, test_queue_spec])
-// }
+
+pub fn build_queue_test() {
+  let test_event_listener = fn(_: bg_jobs.Event) { Nil }
+  let test_worker =
+    bg_jobs.Worker(job_name: "test_worker", handler: fn(_) { Ok(Nil) })
+
+  bg_jobs.new_queue("test_queue")
+  |> bg_jobs.queue_with_max_retries(1)
+  |> bg_jobs.queue_with_init_timeout(2)
+  |> bg_jobs.queue_with_max_concurrent_jobs(3)
+  |> bg_jobs.queue_with_poll_interval_ms(4)
+  |> should.equal(
+    bg_jobs.QueueSpec(
+      name: "test_queue",
+      workers: [],
+      max_retries: 1,
+      init_timeout: 2,
+      max_concurrent_jobs: 3,
+      poll_interval: 4,
+      event_listeners: [],
+    ),
+  )
+
+  bg_jobs.new_queue("test_queue")
+  |> bg_jobs.queue_with_workers([test_worker, test_worker])
+  |> fn(queue) { queue.workers }
+  |> list.length
+  |> should.equal(2)
+
+  bg_jobs.new_queue("test_queue")
+  |> bg_jobs.queue_add_worker(test_worker)
+  |> bg_jobs.queue_add_worker(test_worker)
+  |> fn(queue) { queue.workers }
+  |> list.length
+  |> should.equal(2)
+
+  bg_jobs.new_queue("test_queue")
+  |> bg_jobs.queue_with_event_listeners([
+    test_event_listener,
+    test_event_listener,
+  ])
+  |> fn(queue) { queue.event_listeners }
+  |> list.length
+  |> should.equal(2)
+
+  bg_jobs.new_queue("test_queue")
+  |> bg_jobs.queue_add_event_listener(test_event_listener)
+  |> bg_jobs.queue_add_event_listener(test_event_listener)
+  |> fn(queue) { queue.event_listeners }
+  |> list.length
+  |> should.equal(2)
+
+  bg_jobs.new_queue("test_queue")
+  |> bg_jobs.queue_add_event_listener(test_event_listener)
+  |> bg_jobs.queue_add_event_listeners([
+    test_event_listener,
+    test_event_listener,
+  ])
+  |> fn(queue) { queue.event_listeners }
+  |> list.length
+  |> should.equal(3)
+}

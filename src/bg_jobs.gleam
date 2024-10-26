@@ -14,6 +14,14 @@ import youid/uuid
 
 // Errors
 //---------------
+pub type BgJobs {
+  BgJobs(
+    supervisor: process.Subject(supervisor.Message),
+    queue_registry: QueueRegistry,
+    dispatcher_registry: DispatcherRegistry,
+    scheduled_jobs_registry: QueueRegistry,
+  )
+}
 
 /// Represents errors that can occur during background job processing.
 pub type BgJobError {
@@ -42,7 +50,7 @@ pub type BgJobError {
 /// }
 /// ```
 pub type Worker {
-  Worker(job_name: String, execute: fn(Job) -> Result(Nil, String))
+  Worker(job_name: String, handler: fn(Job) -> Result(Nil, String))
 }
 
 // Job
@@ -51,6 +59,7 @@ pub type Worker {
 /// It's the data representing a job in the queue.
 ///
 /// It contains all the necessary information to process the job.
+///
 pub type Job {
   Job(
     id: String,
@@ -64,13 +73,16 @@ pub type Job {
   )
 }
 
-/// Used when constructing a new job
+/// Enum representing 3 ways of setting a jobs available_at 
+///
 pub type JobAvailability {
   AvailableNow
   AvailableAt(#(#(Int, Int, Int), #(Int, Int, Int)))
   AvailableIn(Int)
 }
 
+/// Data that is needed to enqueue a new job
+///
 pub type JobEnqueueRequest {
   JobEnqueueRequest(
     name: String,
@@ -79,28 +91,44 @@ pub type JobEnqueueRequest {
   )
 }
 
+/// Create a new job_request
+///
 pub fn new_job(name: String, payload: String) {
   JobEnqueueRequest(name:, payload:, availability: AvailableNow)
 }
 
-pub fn job_with_availability(
+/// Set the availability of the job_request to a specific date-time
+///
+pub fn job_with_available_at(
   job_request: JobEnqueueRequest,
-  availability: JobAvailability,
+  availabile_at: #(#(Int, Int, Int), #(Int, Int, Int)),
 ) {
-  JobEnqueueRequest(..job_request, availability:)
+  JobEnqueueRequest(..job_request, availability: AvailableAt(availabile_at))
 }
 
+/// Set the availability of the job_request to a time in the future
+///
+pub fn job_with_available_in(job_request: JobEnqueueRequest, availabile_in: Int) {
+  JobEnqueueRequest(..job_request, availability: AvailableIn(availabile_in))
+}
+
+/// Convert JobAvailability to erlang date time
+///
 fn available_at_from_availability(availability: JobAvailability) {
   case availability {
-    AvailableNow -> birl.now() |> birl.to_erlang_datetime()
-    AvailableAt(date) ->
+    AvailableNow -> {
+      birl.now() |> birl.to_erlang_datetime()
+    }
+    AvailableAt(date) -> {
       date
       |> birl.from_erlang_local_datetime()
       |> birl.to_erlang_datetime()
-    AvailableIn(delay) ->
+    }
+    AvailableIn(delay) -> {
       birl.now()
       |> birl.add(duration.milli_seconds(delay))
       |> birl.to_erlang_datetime()
+    }
   }
 }
 
@@ -135,10 +163,35 @@ pub type FailedJob {
 // Queue
 //---------------
 type QueueRegistry =
-  chip.Registry(Message, String, Nil)
+  chip.Registry(QueueMessage, String, Nil)
+
+type DispatcherRegistry =
+  chip.Registry(DispatcherMessage, String, Nil)
+
+type Registries {
+  Registries(
+    queue_registry: QueueRegistry,
+    dispatcher_registry: DispatcherRegistry,
+    scheduled_jobs_registry: QueueRegistry,
+  )
+}
+
+type ContextBuilder {
+  ContextBuilder(
+    caller: process.Subject(Registries),
+    queue_registry: QueueRegistry,
+    dispatcher_registry: option.Option(DispatcherRegistry),
+    scheduled_jobs_registry: option.Option(QueueRegistry),
+  )
+}
 
 type Context {
-  Context(caller: process.Subject(QueueRegistry), registry: QueueRegistry)
+  Context(
+    caller: process.Subject(Registries),
+    queue_registry: QueueRegistry,
+    dispatcher_registry: DispatcherRegistry,
+    scheduled_jobs_registry: QueueRegistry,
+  )
 }
 
 pub type QueueSupervisorSpec {
@@ -151,6 +204,8 @@ pub type QueueSupervisorSpec {
   )
 }
 
+/// Start building a new spec for bg_jobs.
+///
 pub fn new(db_adapter: DbAdapter) {
   QueueSupervisorSpec(
     max_frequency: 5,
@@ -161,6 +216,8 @@ pub fn new(db_adapter: DbAdapter) {
   )
 }
 
+/// Set the supervisors max frequency
+///
 pub fn with_supervisor_max_frequency(
   spec: QueueSupervisorSpec,
   max_frequency: Int,
@@ -168,6 +225,8 @@ pub fn with_supervisor_max_frequency(
   QueueSupervisorSpec(..spec, max_frequency:)
 }
 
+/// Set the supervisors frequency period
+///
 pub fn with_supervisor_frequency_period(
   spec: QueueSupervisorSpec,
   frequency_period: Int,
@@ -175,6 +234,8 @@ pub fn with_supervisor_frequency_period(
   QueueSupervisorSpec(..spec, frequency_period:)
 }
 
+/// Add an event_listener to all queues under the supervisor
+///
 pub fn add_event_listener(
   spec: QueueSupervisorSpec,
   event_listener: EventListener,
@@ -185,10 +246,13 @@ pub fn add_event_listener(
   )
 }
 
+/// Add a queue-spec to create a new queue with the supervisor
+///
 pub fn add_queue(spec: QueueSupervisorSpec, queue: QueueSpec) {
   QueueSupervisorSpec(..spec, queues: list.concat([spec.queues, [queue]]))
 }
 
+/// Represents a queue that should be created under the queue supervisor
 pub type QueueSpec {
   QueueSpec(
     name: String,
@@ -201,6 +265,7 @@ pub type QueueSpec {
   )
 }
 
+/// Start building a new queue-spec that should be created under the queue supervisor
 pub fn new_queue(name: String) {
   QueueSpec(
     name: name,
@@ -213,34 +278,55 @@ pub fn new_queue(name: String) {
   )
 }
 
+/// Set the name of the queue
+/// NOTE: This needs to be reproducable on restarts, but unique across all queues, 
+/// even if running on different machines
+///
 pub fn queue_with_name(spec: QueueSpec, name: String) {
   QueueSpec(..spec, name:)
 }
 
+/// Maximum times a job will be retried before being considered failed
+/// and moved to the failed_jobs table
+///
 pub fn queue_with_max_retries(spec: QueueSpec, max_retries: Int) {
   QueueSpec(..spec, max_retries:)
 }
 
+/// Amount of time in milli seconds the queue is given to start
+///
 pub fn queue_with_init_timeout(spec: QueueSpec, init_timeout: Int) {
   QueueSpec(..spec, init_timeout:)
 }
 
-pub fn queue_with_max_concurrent_jobs(spec: QueueSpec, init_timeout: Int) {
-  QueueSpec(..spec, init_timeout:)
+/// Maximum number of jobs to run in parallel
+///
+pub fn queue_with_max_concurrent_jobs(spec: QueueSpec, max_concurrent_jobs: Int) {
+  QueueSpec(..spec, max_concurrent_jobs:)
 }
 
+/// Time in milli seconds to wait in between checking for new jobs
+///
 pub fn queue_with_poll_interval_ms(spec: QueueSpec, poll_interval: Int) {
   QueueSpec(..spec, poll_interval:)
 }
 
+/// Set workers the queue will poll for and run
+/// NOTE: This will override previously added workers
+///
 pub fn queue_with_workers(spec: QueueSpec, workers: List(Worker)) {
   QueueSpec(..spec, workers:)
 }
 
+/// Add a worker to the list the queue will poll for and run
+///
 pub fn queue_add_worker(spec: QueueSpec, worker: Worker) {
   QueueSpec(..spec, workers: list.concat([spec.workers, [worker]]))
 }
 
+/// Set event listeners for the queue
+/// NOTE: This will override previously added workers
+///
 pub fn queue_with_event_listeners(
   spec: QueueSpec,
   event_listeners: List(EventListener),
@@ -248,6 +334,8 @@ pub fn queue_with_event_listeners(
   QueueSpec(..spec, event_listeners:)
 }
 
+/// Append a list of event listeners for the queue
+///
 pub fn queue_add_event_listeners(
   spec: QueueSpec,
   event_listeners: List(EventListener),
@@ -258,6 +346,8 @@ pub fn queue_add_event_listeners(
   )
 }
 
+/// Add a event listener to the list of event listners for the queue
+///
 pub fn queue_add_event_listener(spec: QueueSpec, event_listener: EventListener) {
   QueueSpec(
     ..spec,
@@ -265,6 +355,11 @@ pub fn queue_add_event_listener(spec: QueueSpec, event_listener: EventListener) 
   )
 }
 
+/// Create the actual queue actor
+/// NOTE: This will, clear all in flight jobs for this queues name
+/// therefore it's important to have a unique name across all queues, 
+/// even if running on different machine
+///
 pub fn create_queue(
   registry registry: QueueRegistry,
   db_adapter db_adapter: DbAdapter,
@@ -307,12 +402,50 @@ pub fn create_queue(
           |> process.selecting(self, function.identity),
       )
     },
-    init_timeout: 1000,
+    init_timeout: spec.init_timeout,
     loop: queue_loop,
   ))
 }
 
-pub fn create(spec: QueueSupervisorSpec) {
+pub fn create_dispatcher(
+  registry registry: DispatcherRegistry,
+  db_adapter db_adapter: DbAdapter,
+  workers workers: List(Worker),
+  event_listners event_listeners: List(EventListener),
+) {
+  actor.start_spec(actor.Spec(
+    init: fn() {
+      let self = process.new_subject()
+
+      // Register the queue under a name on initialization
+      chip.register(
+        registry,
+        chip.new(self)
+          |> chip.tag("job_dispatcher"),
+      )
+
+      let state =
+        DispatcherState(
+          db_adapter: db_adapter,
+          workers: workers,
+          send_event: send_event(event_listeners, _),
+          self:,
+        )
+
+      actor.Ready(
+        state,
+        process.new_selector()
+          |> process.selecting(self, function.identity),
+      )
+    },
+    init_timeout: 10_000,
+    loop: dispatcher_loop,
+  ))
+}
+
+/// Create the supervisor and all it's queues based on the provided spec
+///
+pub fn create(spec: QueueSupervisorSpec) -> Result(BgJobs, BgJobError) {
   let self = process.new_subject()
 
   let all_workers =
@@ -328,7 +461,7 @@ pub fn create(spec: QueueSupervisorSpec) {
         frequency_period: spec.max_frequency,
         init: fn(children) {
           children
-          |> supervisor.add(registry_otp_worker())
+          |> supervisor_add_registry_workers()
           // Add the dispatch worker
           |> supervisor.add(create_dispatcher_worker(
             spec.db_adapter,
@@ -343,7 +476,7 @@ pub fn create(spec: QueueSupervisorSpec) {
                 queue_spec
                 |> queue_with_event_listeners(spec.event_listeners)
                 |> create_queue(
-                  registry: context.registry,
+                  registry: context.queue_registry,
                   db_adapter: spec.db_adapter,
                   queue_spec: _,
                 )
@@ -359,48 +492,106 @@ pub fn create(spec: QueueSupervisorSpec) {
 
   case supervisor {
     Ok(supervisor) -> {
-      let assert Ok(queue_registry) = process.receive(self, 500)
-      Ok(#(supervisor, queue_registry))
+      let assert Ok(Registries(
+        queue_registry,
+        dispatcher_registry,
+        scheduled_jobs_registry,
+      )) = process.receive(self, 500)
+      Ok(BgJobs(
+        supervisor:,
+        queue_registry:,
+        dispatcher_registry:,
+        scheduled_jobs_registry:,
+      ))
     }
     Error(e) -> {
-      io.debug("Could not create supervisor")
+      // TODO: change to send_event
+      io.debug(#("Could not create supervisor", e))
       Error(SetupError(e))
     }
   }
 }
 
+/// Create the dispatch worker that is responsible for enqueueing all jobs
+///
 fn create_dispatcher_worker(
   db_adapter: DbAdapter,
   workers: List(Worker),
   event_listners: List(EventListener),
 ) {
   supervisor.worker(fn(context: Context) {
-    create_queue(
-      registry: context.registry,
-      db_adapter: db_adapter,
-      queue_spec: new_queue("job_dispatcher")
-        |> queue_with_workers(workers)
-        |> queue_with_event_listeners(event_listners),
+    create_dispatcher(
+      registry: context.dispatcher_registry,
+      db_adapter:,
+      workers:,
+      event_listners:,
     )
   })
 }
 
 /// Create queue registry supervisor worker
-fn registry_otp_worker() {
-  supervisor.worker(fn(_caller: process.Subject(QueueRegistry)) { chip.start() })
-  |> supervisor.returning(fn(caller, registry) { Context(caller, registry) })
+fn supervisor_add_registry_workers(children) {
+  children
+  |> supervisor.add(
+    supervisor.worker(fn(_caller: process.Subject(Registries)) { chip.start() })
+    |> supervisor.returning(
+      fn(caller: process.Subject(Registries), registry: QueueRegistry) {
+        ContextBuilder(caller, registry, option.None, option.None)
+      },
+    ),
+  )
+  |> supervisor.add(
+    supervisor.worker(fn(_context: ContextBuilder) { chip.start() })
+    |> supervisor.returning(
+      fn(context_builder: ContextBuilder, registry: DispatcherRegistry) {
+        ContextBuilder(
+          caller: context_builder.caller,
+          queue_registry: context_builder.queue_registry,
+          dispatcher_registry: option.Some(registry),
+          scheduled_jobs_registry: option.None,
+        )
+      },
+    ),
+  )
+  |> supervisor.add(
+    supervisor.worker(fn(_context: ContextBuilder) { chip.start() })
+    |> supervisor.returning(
+      fn(context_builder: ContextBuilder, registry: QueueRegistry) {
+        let assert option.Some(dispatcher_registry) =
+          context_builder.dispatcher_registry
+        Context(
+          caller: context_builder.caller,
+          queue_registry: context_builder.queue_registry,
+          dispatcher_registry:,
+          scheduled_jobs_registry: registry,
+        )
+      },
+    ),
+  )
 }
 
-/// Send back queue registry to parent 
+/// Send queue registry back to parent 
+///
 fn supervisor_ready() {
   supervisor.worker(fn(_context: Context) { Ok(process.new_subject()) })
   |> supervisor.returning(fn(context: Context, _self) {
-    process.send(context.caller, context.registry)
+    process.send(
+      context.caller,
+      Registries(
+        context.queue_registry,
+        context.dispatcher_registry,
+        context.scheduled_jobs_registry,
+      ),
+    )
     Nil
   })
 }
 
-fn remove_in_flight_jobs(queue_name: String, db_adapter: DbAdapter) {
+/// Remove in flight jobs to avoid orphaned jobs.
+/// This would happen if a queue has active jobs and get's restarted, 
+/// either because of a new deploy or a panic
+///
+pub fn remove_in_flight_jobs(queue_name: String, db_adapter: DbAdapter) {
   db_adapter.get_running_jobs(queue_name)
   |> result.map(fn(jobs) {
     jobs
@@ -415,11 +606,8 @@ fn remove_in_flight_jobs(queue_name: String, db_adapter: DbAdapter) {
 /// ```gleam
 /// enqueue_job("my_queue", "example_job", to_string(ExamplePayload("example")));
 /// ```
-pub fn enqueue_job(
-  job_request: JobEnqueueRequest,
-  queue_repository: process.Subject(chip.Message(Message, String, Nil)),
-) {
-  let assert Ok(queue) = chip.find(queue_repository, "job_dispatcher")
+pub fn enqueue_job(job_request: JobEnqueueRequest, bg: BgJobs) {
+  let assert Ok(queue) = chip.find(bg.dispatcher_registry, "job_dispatcher")
   process.try_call(
     queue,
     EnqueueJob(
@@ -434,12 +622,12 @@ pub fn enqueue_job(
   |> result.flatten
 }
 
-pub fn start_processing_all(registry: QueueRegistry) {
-  chip.dispatch(registry, fn(queue) { actor.send(queue, StartPolling) })
+pub fn start_processing_all(bg: BgJobs) {
+  chip.dispatch(bg.queue_registry, fn(queue) { actor.send(queue, StartPolling) })
 }
 
-pub fn stop_processing_all(registry: QueueRegistry) {
-  chip.dispatch(registry, fn(queue) { actor.send(queue, StopPolling) })
+pub fn stop_processing_all(bg: BgJobs) {
+  chip.dispatch(bg.queue_registry, fn(queue) { actor.send(queue, StopPolling) })
 }
 
 /// Sends a message to the specified queue to process jobs.
@@ -457,30 +645,15 @@ pub fn process_jobs(queue) {
 // Database
 //---------------
 
-/// `DbAdapter` defines the interface for database interactions related to job management.
+/// Defines the interface for database interactions related to job management.
 ///
 /// Each database implementation must provide functions to enqueue, retrieve, and manage jobs.
 ///
-/// ## Example
-/// ```gleam
-/// pub fn new_sqlite_db_adapter(conn: sqlight.Connection) {
-///   queue.DbAdapter(
-///     enqueue_job: enqueue_job(conn),
-///     get_next_jobs: get_next_jobs(conn),
-///     move_job_to_succeded: move_job_to_succeded(conn),
-///     move_job_to_failed: move_job_to_failed(conn),
-///     get_succeeded_jobs: get_succeeded_jobs(conn),
-///     get_failed_jobs: get_failed_jobs(conn),
-///     increment_attempts: increment_attempts(conn),
-///   )
-/// }
-/// ```
 pub type DbAdapter {
   DbAdapter(
     enqueue_job: fn(String, String, #(#(Int, Int, Int), #(Int, Int, Int))) ->
       Result(Job, BgJobError),
-    get_next_jobs: fn(List(String), Int, String) ->
-      Result(List(Job), BgJobError),
+    claim_jobs: fn(List(String), Int, String) -> Result(List(Job), BgJobError),
     release_claim: fn(String) -> Result(Job, BgJobError),
     move_job_to_succeded: fn(Job) -> Result(Nil, BgJobError),
     move_job_to_failed: fn(Job, String) -> Result(Nil, BgJobError),
@@ -517,71 +690,38 @@ pub fn send_event(event_listners: List(EventListener), event: Event) {
   |> list.each(fn(handler) { handler(event) })
 }
 
-// Actor
+// Dispatcher Actor 
 //---------------
 
-pub opaque type Message {
+pub opaque type DispatcherMessage {
   EnqueueJob(
     reply_with: process.Subject(Result(Job, BgJobError)),
     name: String,
     payload: String,
     available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   )
-  StartPolling
-  StopPolling
-  Pause
-  HandleError(Job, exception: String)
-  HandleSuccess(Job)
-  ProcessJobs
+  HandleDispatchError(Job, exception: String)
 }
 
-pub type QueueState {
-  QueueState(
-    // state
-    is_polling: Bool,
-    active_jobs: Int,
-    // settings
-    self: process.Subject(Message),
-    queue_name: String,
+pub type DispatcherState {
+  DispatcherState(
+    self: process.Subject(DispatcherMessage),
     db_adapter: DbAdapter,
-    poll_interval: Int,
-    max_retries: Int,
-    max_concurrent_jobs: Int,
     send_event: fn(Event) -> Nil,
     workers: List(Worker),
   )
 }
 
-fn queue_loop(
-  message: Message,
-  state: QueueState,
-) -> actor.Next(Message, QueueState) {
+fn dispatcher_loop(
+  message: DispatcherMessage,
+  state: DispatcherState,
+) -> actor.Next(DispatcherMessage, DispatcherState) {
   case message {
-    StartPolling -> {
-      case state.queue_name {
-        "job_dispatcher" -> actor.continue(state)
-        _ -> {
-          process.send_after(state.self, state.poll_interval, Pause)
-          state.send_event(QueuePollingStartedEvent(state.queue_name))
-          actor.continue(QueueState(..state, is_polling: True))
-        }
-      }
+    HandleDispatchError(job, exception) -> {
+      let assert Ok(_) = state.db_adapter.move_job_to_failed(job, exception)
+      state.send_event(JobFailedEvent("job_dispatcher", job))
+      actor.continue(state)
     }
-
-    StopPolling -> {
-      actor.continue(QueueState(..state, is_polling: False))
-    }
-
-    Pause -> {
-      case state.is_polling {
-        True -> {
-          process.send_after(state.self, state.poll_interval, ProcessJobs)
-          actor.continue(state)
-        }
-        False -> actor.continue(state)
-      }
-    }
-
     EnqueueJob(client, job_name, payload, available_at) -> {
       let has_worker_for_job_name =
         list.map(state.workers, fn(job) { job.job_name })
@@ -593,7 +733,7 @@ fn queue_loop(
           process.send(client, job)
           case job {
             Ok(job) -> state.send_event(JobEnqueuedEvent(job))
-            Error(e) -> state.send_event(QueueErrorEvent(state.queue_name, e))
+            Error(e) -> state.send_event(QueueErrorEvent("job_dispatcher", e))
           }
         }
         Error(_) -> {
@@ -612,15 +752,71 @@ fn queue_loop(
             )
           actor.send(
             state.self,
-            HandleError(job, "Could not enqueue job with no worker"),
+            HandleDispatchError(job, "Could not enqueue job with no worker"),
           )
 
           let error = DispatchJobError("No worker for job: " <> job_name)
           process.send(client, Error(error))
-          state.send_event(QueueErrorEvent(state.queue_name, error))
+          state.send_event(QueueErrorEvent("job_dispatcher", error))
         }
       }
       actor.continue(state)
+    }
+  }
+}
+
+// QueueActor 
+//---------------
+
+pub opaque type QueueMessage {
+  StartPolling
+  StopPolling
+  WaitBetweenPoll
+  HandleError(Job, exception: String)
+  HandleSuccess(Job)
+  ProcessJobs
+}
+
+pub type QueueState {
+  QueueState(
+    // state
+    is_polling: Bool,
+    active_jobs: Int,
+    // settings
+    self: process.Subject(QueueMessage),
+    queue_name: String,
+    db_adapter: DbAdapter,
+    poll_interval: Int,
+    max_retries: Int,
+    max_concurrent_jobs: Int,
+    send_event: fn(Event) -> Nil,
+    workers: List(Worker),
+  )
+}
+
+fn queue_loop(
+  message: QueueMessage,
+  state: QueueState,
+) -> actor.Next(QueueMessage, QueueState) {
+  case message {
+    StartPolling -> {
+      process.send_after(state.self, state.poll_interval, WaitBetweenPoll)
+      state.send_event(QueuePollingStartedEvent(state.queue_name))
+      actor.continue(QueueState(..state, is_polling: True))
+    }
+
+    StopPolling -> {
+      actor.continue(QueueState(..state, is_polling: False))
+    }
+
+    WaitBetweenPoll -> {
+      case state.is_polling {
+        True -> {
+          process.send_after(state.self, state.poll_interval, ProcessJobs)
+          actor.continue(state)
+        }
+        False -> actor.continue(state)
+      }
     }
 
     HandleError(job, exception) -> {
@@ -639,12 +835,12 @@ fn queue_loop(
       let new_jobs_limit = state.max_concurrent_jobs - state.active_jobs
       case new_jobs_limit {
         0 -> {
-          actor.send(state.self, Pause)
+          actor.send(state.self, WaitBetweenPoll)
           actor.continue(state)
         }
         _ -> {
           let jobs = case
-            state.db_adapter.get_next_jobs(
+            state.db_adapter.claim_jobs(
               list.map(state.workers, fn(job) { job.job_name }),
               new_jobs_limit,
               state.queue_name,
@@ -676,7 +872,7 @@ fn queue_loop(
           })
 
           let active_jobs = state.active_jobs + list.length(jobs)
-          actor.send(state.self, Pause)
+          actor.send(state.self, WaitBetweenPoll)
           actor.continue(QueueState(..state, active_jobs:))
         }
       }
@@ -701,7 +897,7 @@ fn run_worker(job: Job, worker: Worker, state: QueueState) {
   process.start(
     fn() {
       state.send_event(JobStartEvent(state.queue_name, job))
-      case worker.execute(job), job.attempts < state.max_retries {
+      case worker.handler(job), job.attempts < state.max_retries {
         Ok(_), _ -> {
           actor.send(state.self, HandleSuccess(job))
         }

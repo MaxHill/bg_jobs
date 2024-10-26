@@ -1,5 +1,4 @@
 import bg_jobs
-import chip
 import gleam/dynamic
 import gleam/erlang/process
 import gleam/int
@@ -14,10 +13,10 @@ pub type Payload {
 }
 
 pub fn worker(logger: process.Subject(test_helpers.LogMessage)) {
-  bg_jobs.Worker(job_name: job_name, execute: execute(logger, _))
+  bg_jobs.Worker(job_name: job_name, handler: handler(logger, _))
 }
 
-pub fn execute(
+pub fn handler(
   logger: process.Subject(test_helpers.LogMessage),
   job: bg_jobs.Job,
 ) {
@@ -32,13 +31,9 @@ pub fn execute(
   Error("I'm always failing")
 }
 
-pub fn dispatch(
-  queue_repository: process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
-  payload: Payload,
-) {
+pub fn dispatch(bg: bg_jobs.BgJobs, payload: Payload) {
   bg_jobs.new_job(job_name, to_string(payload))
-  |> bg_jobs.job_with_availability(bg_jobs.AvailableNow)
-  |> bg_jobs.enqueue_job(queue_repository)
+  |> bg_jobs.enqueue_job(bg)
 }
 
 // Private methods

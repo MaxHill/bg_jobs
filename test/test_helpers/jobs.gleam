@@ -1,6 +1,5 @@
 import bg_jobs
 import bg_jobs/sqlite_db_adapter
-import chip
 import gleam/erlang/process
 import sqlight
 import test_helpers
@@ -17,12 +16,7 @@ pub fn queue(queue_name: String) {
 pub fn setup(
   conn: sqlight.Connection,
   f: fn(
-    #(
-      process.Subject(chip.Message(bg_jobs.Message, String, Nil)),
-      bg_jobs.DbAdapter,
-      process.Subject(_),
-      process.Subject(_),
-    ),
+    #(bg_jobs.BgJobs, bg_jobs.DbAdapter, process.Subject(_), process.Subject(_)),
   ) ->
     Nil,
 ) {
@@ -37,7 +31,7 @@ pub fn setup(
   let assert Ok(_) = db_adapter.migrate_down()
   let assert Ok(_) = db_adapter.migrate_up()
 
-  let assert Ok(#(_sup, registry)) =
+  let assert Ok(bg) =
     bg_jobs.new(db_adapter)
     |> bg_jobs.add_event_listener(logger_event_listner)
     |> bg_jobs.add_queue(
@@ -50,10 +44,10 @@ pub fn setup(
     |> bg_jobs.add_queue(queue("second_queue"))
     |> bg_jobs.create()
 
-  f(#(registry, db_adapter, logger, event_logger))
+  f(#(bg, db_adapter, logger, event_logger))
 
   // Post test cleanup
-  bg_jobs.stop_processing_all(registry)
+  bg_jobs.stop_processing_all(bg)
   // Give it time to stop polling before connection closes
   process.sleep(100)
 }
