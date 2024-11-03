@@ -1,4 +1,7 @@
-import bg_jobs
+import bg_jobs/db_adapter
+import bg_jobs/internal/errors
+import bg_jobs/internal/events
+import bg_jobs/internal/jobs
 import bg_jobs/internal/utils
 import birl
 import decode
@@ -12,19 +15,20 @@ import youid/uuid
 
 pub fn try_new_store(
   conn: sqlight.Connection,
-  event_listners: List(bg_jobs.EventListener),
+  event_listners: List(events.EventListener),
 ) {
-  let send_event = bg_jobs.send_event(event_listners, _)
-  bg_jobs.DbAdapter(
+  let send_event = events.send_event(event_listners, _)
+  db_adapter.DbAdapter(
     enqueue_job: enqueue_job(conn, send_event),
     claim_jobs: claim_jobs(conn, send_event),
     release_claim: release_claim(conn, send_event),
-    get_running_jobs: get_running_jobs(conn, send_event),
     move_job_to_succeded: move_job_to_succeded(conn, send_event),
     move_job_to_failed: move_job_to_failed(conn, send_event),
+    increment_attempts: increment_attempts(conn, send_event),
+    get_enqueued_jobs: get_enqueued_jobs(conn, send_event),
+    get_running_jobs: get_running_jobs(conn, send_event),
     get_succeeded_jobs: get_succeeded_jobs(conn, send_event),
     get_failed_jobs: get_failed_jobs(conn, send_event),
-    increment_attempts: increment_attempts(conn, send_event),
     migrate_up: migrate_up(conn),
     migrate_down: migrate_down(conn),
   )
@@ -32,22 +36,22 @@ pub fn try_new_store(
 
 // Wrapping sqlight.query adding error casting and logging
 fn query(
-  send_event: fn(bg_jobs.Event) -> Nil,
+  send_event: fn(events.Event) -> Nil,
   sql: String,
   on connection: sqlight.Connection,
   with arguments: List(sqlight.Value),
   expecting decoder: dynamic.Decoder(t),
 ) {
-  send_event(bg_jobs.DbQueryEvent(sql, list.map(arguments, string.inspect)))
+  send_event(events.DbQueryEvent(sql, list.map(arguments, string.inspect)))
   let res =
     sqlight.query(sql, connection, arguments, decoder)
-    |> result.map_error(bg_jobs.DbError)
+    |> result.map_error(errors.DbError)
     |> result.map_error(fn(err) {
-      send_event(bg_jobs.DbErrorEvent(err))
+      send_event(events.DbErrorEvent(err))
       err
     })
     |> result.map(fn(res) {
-      send_event(bg_jobs.DbResponseEvent(string.inspect(res)))
+      send_event(events.DbResponseEvent(string.inspect(res)))
       res
     })
 
@@ -56,9 +60,9 @@ fn query(
 
 fn move_job_to_succeded(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListener,
+  send_event: events.EventListener,
 ) {
-  fn(job: bg_jobs.Job) {
+  fn(job: jobs.Job) {
     use _ <- result.try(query(
       send_event,
       "DELETE FROM jobs
@@ -104,7 +108,7 @@ fn move_job_to_succeded(
 
 fn get_succeeded_jobs(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListener,
+  send_event: events.EventListener,
 ) {
   fn(limit: Int) {
     query(
@@ -123,7 +127,7 @@ fn get_succeeded_jobs(
   }
 }
 
-fn get_failed_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
+fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
     query(
       send_event,
@@ -143,9 +147,9 @@ fn get_failed_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) 
 
 fn move_job_to_failed(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListener,
+  send_event: events.EventListener,
 ) {
-  fn(job: bg_jobs.Job, exception: String) {
+  fn(job: jobs.Job, exception: String) {
     let sql =
       "DELETE FROM jobs
       WHERE id =  ?;"
@@ -197,7 +201,7 @@ fn move_job_to_failed(
   }
 }
 
-fn claim_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
+fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     let now =
       birl.now()
@@ -236,7 +240,7 @@ fn claim_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   }
 }
 
-fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
+fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_id: String) {
     let sql =
       "
@@ -249,7 +253,7 @@ fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
     query(send_event, sql, conn, [sqlight.text(job_id)], decode_enqueued_db_row)
     |> result.try(fn(list) {
       list.first(list)
-      |> result.replace_error(bg_jobs.UnknownError(
+      |> result.replace_error(errors.UnknownError(
         "Should never be possible if insert is successfull",
       ))
     })
@@ -257,7 +261,7 @@ fn release_claim(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
   }
 }
 
-fn get_running_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
+fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(queue_id: String) {
     query(
       send_event,
@@ -271,11 +275,25 @@ fn get_running_jobs(conn: sqlight.Connection, send_event: bg_jobs.EventListener)
   }
 }
 
+fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
+  fn(job_name: String) {
+    query(
+      send_event,
+      "SELECT * FROM jobs WHERE name = ? AND reserved_at is NULL",
+      conn,
+      [sqlight.text(job_name)],
+      decode_enqueued_db_row,
+    )
+    |> result.map(result.all)
+    |> result.flatten
+  }
+}
+
 fn increment_attempts(
   conn: sqlight.Connection,
-  send_event: bg_jobs.EventListener,
+  send_event: events.EventListener,
 ) {
-  fn(job: bg_jobs.Job) {
+  fn(job: jobs.Job) {
     query(
       send_event,
       "
@@ -290,7 +308,7 @@ fn increment_attempts(
     )
     |> result.try(fn(list) {
       list.first(list)
-      |> result.replace_error(bg_jobs.UnknownError(
+      |> result.replace_error(errors.UnknownError(
         "Should never be possible if update is successfull",
       ))
     })
@@ -298,7 +316,7 @@ fn increment_attempts(
   }
 }
 
-fn enqueue_job(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
+fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(
     job_name: String,
     payload: String,
@@ -310,7 +328,13 @@ fn enqueue_job(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
 
     let sql =
       "
-      INSERT INTO jobs (id, name, payload, attempts, created_at, available_at)
+      INSERT INTO jobs (
+        id, 
+        name, 
+        payload, 
+        attempts, 
+        created_at, 
+        available_at)
       VALUES (?, ?, ?, 0, ?, ?)
       RETURNING *;
     "
@@ -330,7 +354,7 @@ fn enqueue_job(conn: sqlight.Connection, send_event: bg_jobs.EventListener) {
     )
     |> result.try(fn(list) {
       list.first(list)
-      |> result.replace_error(bg_jobs.UnknownError(
+      |> result.replace_error(errors.UnknownError(
         "Should never be possible if insert is successfull",
       ))
     })
@@ -376,7 +400,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
     "
 
     sqlight.exec(sql, conn)
-    |> result.map_error(bg_jobs.DbError)
+    |> result.map_error(errors.DbError)
   }
 }
 
@@ -388,7 +412,7 @@ pub fn migrate_down(conn: sqlight.Connection) {
     DROP TABLE IF EXISTS jobs_succeeded;"
 
     sqlight.exec(sql, conn)
-    |> result.map_error(bg_jobs.DbError)
+    |> result.map_error(errors.DbError)
   }
 }
 
@@ -410,24 +434,24 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
       use created_at <- result.try(
         birl.from_naive(created_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(created_at_string)),
+        |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
       use available_at <- result.try(
         birl.from_naive(available_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(created_at_string)),
+        |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
 
       use reserved_at <- result.map(
         option.map(reserved_at_string, fn(dt) {
           birl.from_naive(dt)
           |> result.map(birl.to_erlang_datetime)
-          |> result.replace_error(bg_jobs.ParseDateError(dt))
+          |> result.replace_error(errors.ParseDateError(dt))
         })
         |> utils.transpose_option_to_result,
       )
 
-      bg_jobs.Job(
+      jobs.Job(
         id,
         name,
         payload,
@@ -465,22 +489,22 @@ pub fn decode_succeded_db_row(data: dynamic.Dynamic) {
       use created_at <- result.try(
         birl.from_naive(created_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(created_at_string)),
+        |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
 
       use available_at <- result.try(
         birl.from_naive(available_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(created_at_string)),
+        |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
 
       use succeded_at <- result.map(
         birl.from_naive(succeded_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(succeded_at_string)),
+        |> result.replace_error(errors.ParseDateError(succeded_at_string)),
       )
 
-      bg_jobs.SucceededJob(
+      jobs.SucceededJob(
         id,
         name,
         payload,
@@ -517,22 +541,22 @@ pub fn decode_failed_db_row(data: dynamic.Dynamic) {
       use created_at <- result.try(
         birl.from_naive(created_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(created_at_string)),
+        |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
 
       use available_at <- result.try(
         birl.from_naive(available_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(created_at_string)),
+        |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
 
       use failed_at <- result.map(
         birl.from_naive(failed_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(bg_jobs.ParseDateError(failed_at_string)),
+        |> result.replace_error(errors.ParseDateError(failed_at_string)),
       )
 
-      bg_jobs.FailedJob(
+      jobs.FailedJob(
         id,
         name,
         payload,

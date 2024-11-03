@@ -4,7 +4,10 @@
 packages = [
   { name = "birl", version = "1.7.1", build_tools = ["gleam"], requirements = ["gleam_stdlib", "ranger"], otp_app = "birl", source = "hex", outer_checksum = "5C66647D62BCB11FE327E7A6024907C4A17954EF22865FE0940B54A852446D01" },
   { name = "chip", version = "0.9.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "chip", source = "hex", outer_checksum = "EF5E7F5EEEEBB0F24ADDDF8A3BB24E802ECF19299E9AE8C2E8750FEC96E3CA0A" },
+  { name = "crontab", version = "1.1.14", build_tools = ["mix"], requirements = ["ecto"], otp_app = "crontab", source = "hex", outer_checksum = "4E3B9950BC22AE8D0395FFB5F4B127A140005CBA95745ABF5FF9EE7E8203C6FA" },
+  { name = "decimal", version = "2.1.1", build_tools = ["mix"], requirements = [], otp_app = "decimal", source = "hex", outer_checksum = "53CFE5F497ED0E7771AE1A475575603D77425099BA5FAEF9394932B35020FFCC" },
   { name = "decode", version = "0.2.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "decode", source = "hex", outer_checksum = "4727FC627B803E4F4FF0075B5F93BC022F9293A19B03BF44B5A4C64BF9E8EAE1" },
+  { name = "ecto", version = "3.12.4", build_tools = ["mix"], requirements = ["decimal", "jason", "telemetry"], otp_app = "ecto", source = "hex", outer_checksum = "EF04E4101688A67D061E1B10D7BC1FBF00D1D13C17EEF08B71D070FF9188F747" },
   { name = "esqlite", version = "0.8.8", build_tools = ["rebar3"], requirements = [], otp_app = "esqlite", source = "hex", outer_checksum = "374902457C7D94DC9409C98D3BDD1CA0D50A60DC9F3BDF1FD8EB74C0DCDF02D6" },
   { name = "glam", version = "2.0.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "glam", source = "hex", outer_checksum = "66EC3BCD632E51EED029678F8DF419659C1E57B1A93D874C5131FE220DFAD2B2" },
   { name = "gleam_crypto", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_crypto", source = "hex", outer_checksum = "ADD058DEDE8F0341F1ADE3AAC492A224F15700829D9A3A3F9ADF370F875C51B7" },
@@ -13,11 +16,13 @@ packages = [
   { name = "gleam_otp", version = "0.12.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_stdlib"], otp_app = "gleam_otp", source = "hex", outer_checksum = "CD5FC777E99673BDB390092DF85E34EAA6B8EE1882147496290AB3F45A4960B1" },
   { name = "gleam_stdlib", version = "0.40.0", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "86606B75A600BBD05E539EB59FABC6E307EEEA7B1E5865AFB6D980A93BCB2181" },
   { name = "gleeunit", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "F7A7228925D3EE7D0813C922E062BFD6D7E9310F0BEE585D3A42F3307E3CFD13" },
+  { name = "jason", version = "1.4.4", build_tools = ["mix"], requirements = ["decimal"], otp_app = "jason", source = "hex", outer_checksum = "C5EB0CAB91F094599F94D55BC63409236A8EC69A21A67814529E8D5F6CC90B3B" },
   { name = "logging", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "1098FBF10B54B44C2C7FDF0B01C1253CAFACDACABEFB4B0D027803246753E06D" },
   { name = "pprint", version = "1.0.3", build_tools = ["gleam"], requirements = ["glam", "gleam_stdlib"], otp_app = "pprint", source = "hex", outer_checksum = "76BBB92E23D12D954BD452686543F29EDE8EBEBB7FC0ACCBCA66EEF276EC3A06" },
   { name = "ranger", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "ranger", source = "hex", outer_checksum = "1566C272B1D141B3BBA38B25CB761EF56E312E79EC0E2DFD4D3C19FB0CC1F98C" },
   { name = "singularity", version = "0.1.1", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "singularity", source = "hex", outer_checksum = "AF30FAF75D2D59A1F24DCC5BE6B902F374C115AE54BD0F8CAEDEC1E571BB77BF" },
   { name = "sqlight", version = "0.9.1", build_tools = ["gleam"], requirements = ["esqlite", "gleam_stdlib"], source = "local", path = "../gleam-sqlight" },
+  { name = "telemetry", version = "1.3.0", build_tools = ["rebar3"], requirements = [], otp_app = "telemetry", source = "hex", outer_checksum = "7015FC8919DBE63764F4B4B87A95B7C0996BD539E0D499BE6EC9D7F3875B79E6" },
   { name = "thoas", version = "1.2.1", build_tools = ["rebar3"], requirements = [], otp_app = "thoas", source = "hex", outer_checksum = "E38697EDFFD6E91BD12CEA41B155115282630075C2A727E7A6B2947F5408B86A" },
   { name = "youid", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_crypto", "gleam_erlang", "gleam_stdlib"], otp_app = "youid", source = "hex", outer_checksum = "EF0F693004E221155EE5909C6D3C945DD14F7117DBA882887CF5F45BE399B8CA" },
 ]
@@ -25,6 +30,7 @@ packages = [
 [requirements]
 birl = { version = ">= 1.7.1 and < 2.0.0" }
 chip = { version = ">= 0.9.0 and < 1.0.0" }
+crontab = { version = ">= 1.1.14 and < 2.0.0" }
 decode = { version = ">= 0.2.1 and < 1.0.0" }
 gleam_erlang = { version = ">= 0.26.0 and < 1.0.0" }
 gleam_json = { version = ">= 1.0.1 and < 2.0.0" }

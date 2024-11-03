@@ -1,11 +1,13 @@
-import bg_jobs
+import bg_jobs/internal/jobs
 import bg_jobs/internal/utils
 import bg_jobs/sqlite_db_adapter
 import birl
 import birl/duration
 import gleam/dynamic
 import gleam/erlang/process
+import gleam/io
 import gleam/list
+import gleam/option
 import gleam/order
 import gleeunit/should
 import sqlight
@@ -167,7 +169,7 @@ pub fn move_job_to_success_test() {
   |> list.first
   |> should.be_ok
   |> should.be_ok
-  |> should.equal(bg_jobs.SucceededJob(
+  |> should.equal(jobs.SucceededJob(
     id: job.id,
     name: job.name,
     payload: job.payload,
@@ -214,7 +216,7 @@ pub fn move_job_to_failed_test() {
   |> list.first
   |> should.be_ok
   |> should.be_ok
-  |> should.equal(bg_jobs.FailedJob(
+  |> should.equal(jobs.FailedJob(
     id: job.id,
     name: job.name,
     payload: job.payload,
@@ -259,7 +261,7 @@ pub fn get_succeeded_jobs_test() {
   job_store.get_succeeded_jobs(1)
   |> should.be_ok
   |> should.equal([
-    bg_jobs.SucceededJob(
+    jobs.SucceededJob(
       "job_12345",
       "process_order",
       "\"test-payload\"",
@@ -306,7 +308,7 @@ pub fn get_failed_jobs_test() {
   job_store.get_failed_jobs(1)
   |> should.be_ok
   |> should.equal([
-    bg_jobs.FailedJob(
+    jobs.FailedJob(
       "job_12345",
       "process_order",
       "\"test-payload\"",
@@ -539,8 +541,109 @@ pub fn scheduled_job_test() {
   |> should.equal(["test_job"])
 }
 
+pub fn get_running_jobs_test() {
+  use conn <- sqlight.with_connection("dispatch")
+  let job_store = sqlite_db_adapter.try_new_store(conn, [fn(_) { Nil }])
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
+
+  let assert Ok(_) =
+    sqlight.exec(
+      "INSERT INTO jobs (
+        id, 
+        name, 
+        payload, 
+        attempts, 
+        created_at, 
+        available_at, 
+        reserved_at,
+        reserved_by
+      )
+      VALUES (
+        'job_12345',                                 
+        'process_order',                             
+        '\"test-payload\"',       
+        3,                                           
+        '2024-09-29 10:30:00',                       
+        '2024-09-29 10:30:00',                        
+        '2024-09-29 11:00:00',                        
+        'test_queue'
+      ), (
+        'job_6789',                                 
+        'process_order',                             
+        '\"test-payload\"',       
+        3,                                           
+        '2024-09-29 10:30:00',                       
+        '2024-09-29 10:30:00',
+        NULL,
+        NULL
+      );
+    ",
+      conn,
+    )
+
+  job_store.get_running_jobs("test_queue")
+  |> should.be_ok
+  |> should.equal([
+    jobs.Job(
+      id: "job_12345",
+      name: "process_order",
+      payload: "\"test-payload\"",
+      attempts: 3,
+      created_at: #(#(2024, 09, 29), #(10, 30, 00)),
+      available_at: #(#(2024, 09, 29), #(10, 30, 00)),
+      reserved_at: option.Some(#(#(2024, 09, 29), #(11, 00, 00))),
+      reserved_by: option.Some("test_queue"),
+    ),
+  ])
+}
+
+pub fn get_enqueued_jobs_test() {
+  use conn <- sqlight.with_connection("dispatch")
+  let job_store = sqlite_db_adapter.try_new_store(conn, [fn(_) { Nil }])
+  let assert Ok(_) = job_store.migrate_down()
+  let assert Ok(_) = job_store.migrate_up()
+
+  let assert Ok(_) =
+    sqlight.exec(
+      "INSERT INTO jobs (
+        id, 
+        name, 
+        payload, 
+        attempts, 
+        created_at, 
+        available_at
+      )
+      VALUES (
+        'job_12345',                                 
+        'process_order',                             
+        '\"test-payload\"',       
+        3,                                           
+        '2024-09-29 10:30:00',                       
+        '2024-09-29 10:30:00'                       
+      );
+    ",
+      conn,
+    )
+
+  job_store.get_enqueued_jobs("process_order")
+  |> should.be_ok
+  |> should.equal([
+    jobs.Job(
+      id: "job_12345",
+      name: "process_order",
+      payload: "\"test-payload\"",
+      attempts: 3,
+      created_at: #(#(2024, 09, 29), #(10, 30, 00)),
+      available_at: #(#(2024, 09, 29), #(10, 30, 00)),
+      reserved_at: option.None,
+      reserved_by: option.None,
+    ),
+  ])
+}
+
 // Helpers
-fn validate_job(job: bg_jobs.Job, job_name: String, job_payload: String) {
+fn validate_job(job: jobs.Job, job_name: String, job_payload: String) {
   job.name
   |> should.equal(job_name)
 

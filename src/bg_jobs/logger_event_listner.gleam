@@ -1,14 +1,15 @@
-import bg_jobs
+import bg_jobs/internal/errors
+import bg_jobs/internal/events
 import birl
 import gleam/string
 import logging.{Info}
 
-pub fn listner(event: bg_jobs.Event) {
+pub fn listner(event: events.Event) {
   let now = birl.now() |> birl.to_iso8601()
   case event {
-    bg_jobs.JobEnqueuedEvent(job) ->
+    events.JobEnqueuedEvent(job) ->
       logging.log(Info, now <> "|JobEnqueued|job_name:" <> job.name)
-    bg_jobs.JobFailedEvent(queue_name, job) ->
+    events.JobFailedEvent(queue_name, job) ->
       logging.log(
         Info,
         now
@@ -17,7 +18,7 @@ pub fn listner(event: bg_jobs.Event) {
           <> "|job_name:"
           <> job.name,
       )
-    bg_jobs.JobReservedEvent(queue_name, job) ->
+    events.JobReservedEvent(queue_name, job) ->
       logging.log(
         Info,
         now
@@ -26,12 +27,12 @@ pub fn listner(event: bg_jobs.Event) {
           <> "|job_name:"
           <> job.name,
       )
-    bg_jobs.JobStartEvent(queue_name, job) ->
+    events.JobStartEvent(queue_name, job) ->
       logging.log(
         Info,
         now <> "|JobStart|queue_name:" <> queue_name <> "|job_name:" <> job.name,
       )
-    bg_jobs.JobSuccededEvent(queue_name, job) ->
+    events.JobSuccededEvent(queue_name, job) ->
       logging.log(
         Info,
         now
@@ -40,7 +41,7 @@ pub fn listner(event: bg_jobs.Event) {
           <> "|job_name:"
           <> job.name,
       )
-    bg_jobs.QueueErrorEvent(queue_name, error) ->
+    events.QueueErrorEvent(queue_name, error) ->
       logging.log(
         logging.Error,
         now
@@ -49,11 +50,11 @@ pub fn listner(event: bg_jobs.Event) {
           <> "|job_name:"
           <> error_to_string(error),
       )
-    bg_jobs.QueuePollingStartedEvent(queue_name) ->
+    events.QueuePollingStartedEvent(queue_name) ->
       logging.log(Info, now <> "|QueuePollingStarted|queue_name:" <> queue_name)
-    bg_jobs.QueuePollingStopedEvent(queue_name) ->
+    events.QueuePollingStopedEvent(queue_name) ->
       logging.log(Info, now <> "|QueuePollingStoped|queue_name:" <> queue_name)
-    bg_jobs.DbQueryEvent(sql, attributes) ->
+    events.DbQueryEvent(sql, attributes) ->
       logging.log(
         logging.Debug,
         now
@@ -62,12 +63,12 @@ pub fn listner(event: bg_jobs.Event) {
           <> "|attributes:"
           <> string.inspect(attributes),
       )
-    bg_jobs.DbResponseEvent(response) ->
+    events.DbResponseEvent(response) ->
       logging.log(
         logging.Debug,
         now <> "|DbResponseEvent|response:" <> response,
       )
-    bg_jobs.DbErrorEvent(error) ->
+    events.DbErrorEvent(error) ->
       logging.log(
         logging.Error,
         now <> "|DbErrorEvent|response:" <> error_to_string(error),
@@ -76,12 +77,13 @@ pub fn listner(event: bg_jobs.Event) {
   Nil
 }
 
-fn error_to_string(error: bg_jobs.BgJobError) {
+fn error_to_string(error: errors.BgJobError) {
   case error {
-    bg_jobs.DbError(_err) -> "DbError|message: Database error"
-    bg_jobs.DispatchJobError(reason) -> "DispatchJobError|message:" <> reason
-    bg_jobs.ParseDateError(reason) -> "ParseDateError|message:" <> reason
-    bg_jobs.SetupError(_) -> "SetupError|message:Could not start actor"
-    bg_jobs.UnknownError(reason) -> "UnknownError|message:" <> reason
+    errors.DbError(_err) -> "DbError|message: Database error"
+    errors.DispatchJobError(reason) -> "DispatchJobError|message:" <> reason
+    errors.ParseDateError(reason) -> "ParseDateError|message:" <> reason
+    errors.SetupError(_) -> "SetupError|message:Could not start actor"
+    errors.UnknownError(reason) -> "UnknownError|message:" <> reason
+    errors.ScheduleError(reason) -> "ScheduleError|message:" <> reason
   }
 }

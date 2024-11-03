@@ -1,6 +1,9 @@
+import bg_jobs/db_adapter
 import decode
 import gleam/dynamic
+import gleam/list
 import gleam/option
+import gleam/result
 
 pub fn decode_erlang_timestamp() {
   decode.into({
@@ -32,4 +35,20 @@ pub fn transpose_option_to_result(
 
 pub fn discard_decode(_: dynamic.Dynamic) {
   Ok(Nil)
+}
+
+/// Remove in flight jobs to avoid orphaned jobs.
+/// This would happen if a queue has active jobs and get's restarted, 
+/// either because of a new deploy or a panic
+///
+pub fn remove_in_flight_jobs(
+  queue_name: String,
+  db_adapter: db_adapter.DbAdapter,
+) {
+  db_adapter.get_running_jobs(queue_name)
+  |> result.map(fn(jobs) {
+    jobs
+    |> list.map(fn(job) { job.id })
+    |> list.map(db_adapter.release_claim(_))
+  })
 }

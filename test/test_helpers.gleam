@@ -1,4 +1,5 @@
-import bg_jobs
+import bg_jobs/internal/errors
+import bg_jobs/internal/events
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
 import gleam/list
@@ -48,31 +49,31 @@ fn handle_log_message(
 //---------------
 pub fn new_logger_event_listner(
   logger: process.Subject(LogMessage),
-  event: bg_jobs.Event,
+  event: events.Event,
 ) {
   case event {
-    bg_jobs.JobEnqueuedEvent(job) -> "JobEnqueued|job_name:" <> job.name
-    bg_jobs.JobFailedEvent(queue_name, job) ->
+    events.JobEnqueuedEvent(job) -> "JobEnqueued|job_name:" <> job.name
+    events.JobFailedEvent(queue_name, job) ->
       "JobFailed|queue_name:" <> queue_name <> "|job_name:" <> job.name
-    bg_jobs.JobReservedEvent(queue_name, job) ->
+    events.JobReservedEvent(queue_name, job) ->
       "JobReserved|queue_name:" <> queue_name <> "|job_name:" <> job.name
-    bg_jobs.JobStartEvent(queue_name, job) ->
+    events.JobStartEvent(queue_name, job) ->
       "JobStart|queue_name:" <> queue_name <> "|job_name:" <> job.name
-    bg_jobs.JobSuccededEvent(queue_name, job) ->
+    events.JobSuccededEvent(queue_name, job) ->
       "JobSucceded|queue_name:" <> queue_name <> "|job_name:" <> job.name
-    bg_jobs.QueueErrorEvent(queue_name, error) ->
+    events.QueueErrorEvent(queue_name, error) ->
       "QueueError|queue_name:"
       <> queue_name
       <> "|job_name:"
       <> error_to_string(error)
-    bg_jobs.QueuePollingStartedEvent(queue_name) ->
+    events.QueuePollingStartedEvent(queue_name) ->
       "QueuePollingStarted|queue_name:" <> queue_name
-    bg_jobs.QueuePollingStopedEvent(queue_name) ->
+    events.QueuePollingStopedEvent(queue_name) ->
       "QueuePollingStoped|queue_name:" <> queue_name
-    bg_jobs.DbQueryEvent(sql, attributes) ->
+    events.DbQueryEvent(sql, attributes) ->
       "DbQueryEvent|sql:" <> sql <> "|attributes:" <> string.inspect(attributes)
-    bg_jobs.DbResponseEvent(response) -> "DbResponseEvent|response:" <> response
-    bg_jobs.DbErrorEvent(error) ->
+    events.DbResponseEvent(response) -> "DbResponseEvent|response:" <> response
+    events.DbErrorEvent(error) ->
       "DbErrorEvent|response:" <> string.inspect(error)
   }
   |> fn(str) { "Event:" <> str }
@@ -80,12 +81,13 @@ pub fn new_logger_event_listner(
   Nil
 }
 
-fn error_to_string(error: bg_jobs.BgJobError) {
+fn error_to_string(error: errors.BgJobError) {
   case error {
-    bg_jobs.DbError(_err) -> "DbError|message: Database error"
-    bg_jobs.DispatchJobError(reason) -> "DbError|message:" <> reason
-    bg_jobs.ParseDateError(reason) -> "DbError|message:" <> reason
-    bg_jobs.SetupError(_) -> "DbError|message:Could not start actor"
-    bg_jobs.UnknownError(reason) -> "DbError|message:" <> reason
+    errors.DbError(_err) -> "DbError|message: Database error"
+    errors.DispatchJobError(reason) -> "DbError|message:" <> reason
+    errors.ParseDateError(reason) -> "DbError|message:" <> reason
+    errors.SetupError(_) -> "DbError|message:Could not start actor"
+    errors.UnknownError(reason) -> "DbError|message:" <> reason
+    errors.ScheduleError(reason) -> "ScheduleError|message:" <> reason
   }
 }
