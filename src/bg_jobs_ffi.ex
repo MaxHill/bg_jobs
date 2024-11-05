@@ -3,7 +3,7 @@ defmodule BgJobsFfi do
 
   def next_run_date(cron_expr, timestamp) do
     # Parse the cron expression (e.g., "*/2" -> ~e[*/2])
-    cron = Crontab.CronExpression.Parser.parse!(cron_expr)
+    cron = Crontab.CronExpression.Parser.parse!(cron_expr, true)
 
     naive_date = NaiveDateTime.from_erl!(timestamp)
     # Logger.info("Parsed NaiveDateTime: #{inspect(naive_date)}")

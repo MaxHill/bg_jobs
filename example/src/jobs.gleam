@@ -1,61 +1,42 @@
 import bg_jobs
+import bg_jobs/logger_event_listener
 import bg_jobs/queue
-import bg_jobs/sqlite_store
-import gleam/erlang/process
-import gleam/list
-import gleam/otp/supervisor
-import jobs/send_email
+import bg_jobs/scheduled_job
+import bg_jobs/sqlite_db_adapter
+import jobs/cleanup_db_job
+import jobs/delete_expired_sessions_job
+import jobs/send_email_job
 import sqlight
 
-pub type Queues(msg) {
-  DefaultQueue(process.Subject(queue.Message(msg)))
-  SecondQueue(process.Subject(queue.Message(msg)))
+pub fn setup(conn: sqlight.Connection) {
+  let db_adapter = sqlite_db_adapter.new(conn, [])
+  let assert Ok(_) = db_adapter.migrate_up()
+
+  bg_jobs.new(db_adapter)
+  |> bg_jobs.add_event_listener(logger_event_listener.listner)
+  // Queues
+  |> bg_jobs.add_queue(default_queue())
+  |> bg_jobs.add_queue(second_queue())
+  // Scheduled jobs
+  |> bg_jobs.add_scheduled_job(scheduled_job.new(
+    cleanup_db_job.worker(),
+    scheduled_job.interval_minutes(1),
+  ))
+  |> bg_jobs.add_scheduled_job(scheduled_job.new(
+    delete_expired_sessions_job.worker(),
+    scheduled_job.Schedule(
+      scheduled_job.new_schedule()
+      |> scheduled_job.on_second(10),
+    ),
+  ))
+  |> bg_jobs.create()
 }
 
-pub fn setup_queues(conn: sqlight.Connection) {
-  let assert Ok(_) = bg_jobs.migrate_up(conn)
-
-  let job_store = sqlite_store.try_new_store(conn)
-  let assert Ok(registry) = queue.registry()
-
-  let default_queue =
-    queue.new_otp_worker(
-      registry: registry,
-      queue_type: DefaultQueue,
-      max_retries: 3,
-      job_store: job_store,
-      job_mapper: queue.match_worker([send_email.lookup]),
-    )
-  let second_queue =
-    queue.new_otp_worker(
-      registry: registry,
-      queue_type: SecondQueue,
-      max_retries: 3,
-      job_store: job_store,
-      job_mapper: queue.match_worker([]),
-    )
-
-  let assert Ok(sup) =
-    supervisor.start_spec(
-      supervisor.Spec(
-        argument: Nil,
-        frequency_period: 1,
-        max_frequency: 5,
-        init: fn(children) {
-          [default_queue, second_queue]
-          |> list.fold(children, fn(c, q) { supervisor.add(c, q) })
-        },
-      ),
-    )
-
-  #(registry, sup)
+fn default_queue() {
+  queue.new("default_queue")
+  |> queue.add_worker(send_email_job.worker())
 }
 
-pub fn dispatch_send_email(queues, payload: send_email.SendEmailPayload) {
-  send_email.dispatch(default_queue(queues), payload)
-}
-
-pub fn default_queue(queues) {
-  let assert DefaultQueue(queue) = queue.get_queue(queues, DefaultQueue)
-  queue
+fn second_queue() {
+  queue.new("second_queue")
 }

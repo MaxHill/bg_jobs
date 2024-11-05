@@ -1,6 +1,5 @@
 import bg_jobs
-import bg_jobs/internal/jobs
-import bg_jobs/internal/worker
+import bg_jobs/jobs
 import gleam/dynamic
 import gleam/erlang/process
 import gleam/json
@@ -9,12 +8,8 @@ import test_helpers
 
 pub const job_name = "LOG_JOB"
 
-pub type Payload {
-  Payload(message: String)
-}
-
 pub fn worker(logger: process.Subject(test_helpers.LogMessage)) {
-  worker.Worker(job_name: job_name, handler: handler(logger, _))
+  jobs.Worker(job_name: job_name, handler: handler(logger, _))
 }
 
 pub fn handler(logger: process.Subject(test_helpers.LogMessage), job: jobs.Job) {
@@ -23,8 +18,12 @@ pub fn handler(logger: process.Subject(test_helpers.LogMessage), job: jobs.Job) 
   Ok(Nil)
 }
 
+pub type Payload {
+  Payload(message: String)
+}
+
 pub fn dispatch(bg: bg_jobs.BgJobs, payload: Payload) {
-  jobs.new_job(job_name, to_string(payload))
+  bg_jobs.new_job(job_name, to_string(payload))
   |> bg_jobs.enqueue_job(bg)
 }
 

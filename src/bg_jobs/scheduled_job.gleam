@@ -1,26 +1,25 @@
 import bg_jobs/db_adapter
-import bg_jobs/internal/errors
+import bg_jobs/errors
+import bg_jobs/internal/dispatcher
+import bg_jobs/internal/dispatcher_messages
 import bg_jobs/internal/events
-import bg_jobs/internal/jobs
-import bg_jobs/internal/messages as other_messages
 import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
 import bg_jobs/internal/time
 import bg_jobs/internal/utils
-import bg_jobs/internal/worker
+import bg_jobs/jobs
 import bg_jobs_ffi
 import birl
 import chip
 import gleam/erlang/process
 import gleam/function
-import gleam/io
 import gleam/list
 import gleam/otp/actor
 
 pub type Spec {
   Spec(
     schedule: Schedule,
-    worker: worker.Worker,
+    worker: jobs.Worker,
     max_retries: Int,
     init_timeout: Int,
     poll_interval: Int,
@@ -30,7 +29,100 @@ pub type Spec {
 
 pub type Schedule {
   Interval(time.Duration)
-  Advanced(time.CronSchedule)
+  Schedule(time.CronSchedule)
+}
+
+// Reexport
+pub const new_schedule = time.new_schedule
+
+pub const every_second = time.every_second
+
+pub const on_second = time.on_second
+
+pub const on_seconds = time.on_seconds
+
+pub const between_seconds = time.between_seconds
+
+pub const every_minute = time.every_minute
+
+pub const on_minute = time.on_minute
+
+pub const on_minutes = time.on_minutes
+
+pub const between_minutes = time.between_minutes
+
+pub const every_hour = time.every_hour
+
+pub const hour = time.hour
+
+pub const day_of_month = time.day_of_month
+
+pub const month = time.month
+
+pub const day_of_week = time.day_of_week
+
+pub const to_cron_syntax = time.to_cron_syntax
+
+pub fn interval_milliseconds(milliseconds: Int) {
+  Interval(time.Millisecond(milliseconds))
+}
+
+pub fn interval_seconds(seconds: Int) {
+  Interval(time.Second(seconds))
+}
+
+pub fn interval_minutes(minutes: Int) {
+  Interval(time.Minute(minutes))
+}
+
+pub fn interval_hours(hours: Int) {
+  Interval(time.Hour(hours))
+}
+
+pub fn interval_days(days: Int) {
+  Interval(time.Day(days))
+}
+
+pub fn interval_weeks(weeks: Int) {
+  Interval(time.Week(weeks))
+}
+
+pub fn interval_months(months: Int) {
+  Interval(time.Month(months))
+}
+
+pub fn interval_years(years: Int) {
+  Interval(time.Year(years))
+}
+
+pub fn new(worker: jobs.Worker, schedule: Schedule) {
+  Spec(
+    schedule,
+    worker,
+    max_retries: 3,
+    init_timeout: 1000,
+    poll_interval: 10_000,
+    event_listeners: [],
+  )
+}
+
+/// Maximum times a job will be retried before being considered failed
+/// and moved to the failed_jobs table
+///
+pub fn with_max_retries(spec: Spec, max_retries: Int) {
+  Spec(..spec, max_retries:)
+}
+
+/// Amount of time in milli seconds the queue is given to start
+///
+pub fn with_init_timeout(spec: Spec, init_timeout: Int) {
+  Spec(..spec, init_timeout:)
+}
+
+/// Time in milli seconds to wait in between checking for new jobs
+///
+pub fn with_poll_interval_ms(spec: Spec, poll_interval: Int) {
+  Spec(..spec, poll_interval:)
 }
 
 /// Set event listeners for the queue
@@ -43,7 +135,7 @@ pub fn with_event_listeners(
   Spec(..spec, event_listeners:)
 }
 
-pub fn create(
+pub fn build(
   registry registry: registries.ScheduledJobRegistry,
   dispatch_registry dispatch_registry: registries.DispatcherRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
@@ -96,7 +188,7 @@ pub fn create(
 
 // Scheduled job Actor 
 //---------------
-pub type State {
+type State {
   State(
     // state
     is_polling: Bool,
@@ -108,7 +200,7 @@ pub type State {
     poll_interval: Int,
     max_retries: Int,
     send_event: fn(events.Event) -> Nil,
-    worker: worker.Worker,
+    worker: jobs.Worker,
     dispatch_registry: registries.DispatcherRegistry,
   )
 }
@@ -146,23 +238,27 @@ fn loop(message: Message, state: State) -> actor.Next(Message, State) {
     }
 
     messages.ScheduleNext -> {
-      let next_run_date = get_next_run_date(state)
-
       case state.db_adapter.get_enqueued_jobs(state.worker.job_name) {
         Ok([]) -> {
+          let next_run_date = get_next_run_date(state)
           // No jobs enqueued; attempt to schedule the next run
           let assert Ok(_) = schedule_next(state, next_run_date)
           Nil
         }
         // Do nothing if there is one scheduled job
         Ok([_one]) -> Nil
-        Ok(_more) -> {
+        // Cleanup job overflow
+        Ok(more) -> {
+          more
+          |> list.each(state.db_adapter.move_job_to_failed(
+            _,
+            "Too many scheduled jobs",
+          ))
           state.send_event(events.QueueErrorEvent(
             state.name,
-            errors.ScheduleError("Too many queued jobs, crashing"),
+            errors.ScheduleError("Too many queued jobs, cleaning up"),
           ))
-          // If there are more than one scheduled something is wrong
-          panic as "There are too many queued jobs"
+          Nil
         }
         Error(_db_error) -> {
           // Error is logged in db_adapter
@@ -222,7 +318,7 @@ fn get_next_run_date(state: State) {
       |> birl.to_erlang_datetime()
     }
 
-    Advanced(schedule) -> {
+    Schedule(schedule) -> {
       schedule
       |> time.to_cron_syntax()
       |> bg_jobs_ffi.get_next_run_date(birl.now() |> birl.to_erlang_datetime())
@@ -235,18 +331,23 @@ fn schedule_next(
   next_available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
 ) {
   // Job dispatcher should always exist otherwise crash
-  let assert Ok(queue) = chip.find(state.dispatch_registry, "job_dispatcher")
+  let assert Ok(queue) = chip.find(state.dispatch_registry, dispatcher.name)
 
   // Errors are handled in the dispatcher 
   let _scheduled_job =
     process.try_call(
       queue,
-      other_messages.EnqueueJob(_, state.worker.job_name, "", next_available_at),
+      dispatcher_messages.EnqueueJob(
+        _,
+        state.worker.job_name,
+        "",
+        next_available_at,
+      ),
       1000,
     )
 }
 
-fn execute_scheduled_job(job: jobs.Job, worker: worker.Worker, state: State) {
+fn execute_scheduled_job(job: jobs.Job, worker: jobs.Worker, state: State) {
   state.send_event(events.JobStartEvent(state.name, job))
   case worker.handler(job), job.attempts < state.max_retries {
     Ok(_), _ -> {

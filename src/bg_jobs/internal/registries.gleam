@@ -1,12 +1,13 @@
-import bg_jobs/internal/messages
+import bg_jobs/internal/dispatcher_messages
+import bg_jobs/internal/queue_messages
 import bg_jobs/internal/scheduled_jobs_messages
 import chip
 
 pub type QueueRegistry =
-  chip.Registry(messages.QueueMessage, String, Nil)
+  chip.Registry(queue_messages.Message, String, Nil)
 
 pub type DispatcherRegistry =
-  chip.Registry(messages.DispatcherMessage, String, Nil)
+  chip.Registry(dispatcher_messages.Message, String, Nil)
 
 pub type ScheduledJobRegistry =
   chip.Registry(scheduled_jobs_messages.Message, String, Nil)

@@ -1,4 +1,4 @@
-import bg_jobs/internal/errors
+import bg_jobs/errors
 import bg_jobs/internal/events
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
@@ -75,6 +75,7 @@ pub fn new_logger_event_listner(
     events.DbResponseEvent(response) -> "DbResponseEvent|response:" <> response
     events.DbErrorEvent(error) ->
       "DbErrorEvent|response:" <> string.inspect(error)
+    events.SetupErrorEvent(error) -> "SetupErrorEvent" <> string.inspect(error)
   }
   |> fn(str) { "Event:" <> str }
   |> log_message(logger)

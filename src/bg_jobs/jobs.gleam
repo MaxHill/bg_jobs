@@ -42,13 +42,13 @@ pub type JobEnqueueRequest {
 
 /// Create a new job_request
 ///
-pub fn new_job(name: String, payload: String) {
+pub fn new(name: String, payload: String) {
   JobEnqueueRequest(name:, payload:, availability: AvailableNow)
 }
 
 /// Set the availability of the job_request to a specific date-time
 ///
-pub fn job_with_available_at(
+pub fn with_available_at(
   job_request: JobEnqueueRequest,
   availabile_at: #(#(Int, Int, Int), #(Int, Int, Int)),
 ) {
@@ -57,28 +57,8 @@ pub fn job_with_available_at(
 
 /// Set the availability of the job_request to a time in the future
 ///
-pub fn job_with_available_in(job_request: JobEnqueueRequest, availabile_in: Int) {
+pub fn with_available_in(job_request: JobEnqueueRequest, availabile_in: Int) {
   JobEnqueueRequest(..job_request, availability: AvailableIn(availabile_in))
-}
-
-/// Convert JobAvailability to erlang date time
-///
-pub fn available_at_from_availability(availability: JobAvailability) {
-  case availability {
-    AvailableNow -> {
-      birl.now() |> birl.to_erlang_datetime()
-    }
-    AvailableAt(date) -> {
-      date
-      |> birl.from_erlang_local_datetime()
-      |> birl.to_erlang_datetime()
-    }
-    AvailableIn(delay) -> {
-      birl.now()
-      |> birl.add(duration.milli_seconds(delay))
-      |> birl.to_erlang_datetime()
-    }
-  }
 }
 
 /// Holds data about the outcome of processed a job.
@@ -107,4 +87,25 @@ pub type FailedJob {
     available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
     failed_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   )
+}
+
+// Worker
+//---------------
+
+/// Represents a job worker responsible for executing specific tasks.
+///
+/// Each job must implement this type, defining the job name and its execution logic.
+///
+/// ## Example
+///
+/// ```gleam
+/// pub fn worker(email_service: SomeService) {
+///   Worker(job_name: "send_email", execute: fn(job) { 
+///     from_string(job) 
+///     |> email_service.send
+///   })
+/// }
+/// ```
+pub type Worker {
+  Worker(job_name: String, handler: fn(Job) -> Result(Nil, String))
 }

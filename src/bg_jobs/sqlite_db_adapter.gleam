@@ -1,8 +1,8 @@
 import bg_jobs/db_adapter
-import bg_jobs/internal/errors
+import bg_jobs/errors
 import bg_jobs/internal/events
-import bg_jobs/internal/jobs
 import bg_jobs/internal/utils
+import bg_jobs/jobs
 import birl
 import decode
 import gleam/dynamic
@@ -13,10 +13,7 @@ import gleam/string
 import sqlight
 import youid/uuid
 
-pub fn try_new_store(
-  conn: sqlight.Connection,
-  event_listners: List(events.EventListener),
-) {
+pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener)) {
   let send_event = events.send_event(event_listners, _)
   db_adapter.DbAdapter(
     enqueue_job: enqueue_job(conn, send_event),
@@ -228,7 +225,7 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
       RETURNING *;
     "
     let arguments =
-      list.concat([
+      list.flatten([
         [sqlight.text(now), sqlight.text(queue_id)],
         list.map(job_names, sqlight.text),
         [sqlight.text(now), sqlight.int(limit)],

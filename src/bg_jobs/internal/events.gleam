@@ -1,10 +1,12 @@
-import bg_jobs/internal/errors
-import bg_jobs/internal/jobs
+import bg_jobs/errors
+import bg_jobs/jobs
 import gleam/list
+import gleam/otp/actor
 
 // Event
 //---------------
 pub type Event {
+  SetupErrorEvent(message: actor.StartError)
   JobEnqueuedEvent(job: jobs.Job)
   JobReservedEvent(queue_name: String, job: jobs.Job)
   JobStartEvent(queue_name: String, job: jobs.Job)

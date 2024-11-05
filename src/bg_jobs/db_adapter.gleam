@@ -1,5 +1,5 @@
-import bg_jobs/internal/errors
-import bg_jobs/internal/jobs
+import bg_jobs/errors
+import bg_jobs/jobs
 
 // Database
 //---------------

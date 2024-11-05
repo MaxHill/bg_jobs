@@ -1,17 +1,8 @@
-import bg_jobs/internal/errors
-import bg_jobs/internal/jobs
+import bg_jobs/errors
+import bg_jobs/jobs
 import gleam/erlang/process
 
-pub type QueueMessage {
-  StartPolling
-  StopPolling
-  WaitBetweenPoll
-  HandleError(jobs.Job, exception: String)
-  HandleSuccess(jobs.Job)
-  ProcessJobs
-}
-
-pub type DispatcherMessage {
+pub type Message {
   EnqueueJob(
     reply_with: process.Subject(Result(jobs.Job, errors.BgJobError)),
     name: String,

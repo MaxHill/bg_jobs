@@ -1,9 +1,9 @@
 import bg_jobs
 import bg_jobs/db_adapter
 import bg_jobs/internal/events
-import bg_jobs/internal/jobs
 import bg_jobs/internal/utils
-import bg_jobs/internal/worker
+import bg_jobs/jobs
+import bg_jobs/queue
 import bg_jobs/sqlite_db_adapter
 import chip
 import gleam/erlang/process
@@ -148,7 +148,7 @@ pub fn keep_going_after_panic_test() {
   use conn <- sqlight.with_connection(":memory:")
   let bad_adapter =
     db_adapter.DbAdapter(
-      ..sqlite_db_adapter.try_new_store(conn, []),
+      ..sqlite_db_adapter.new(conn, []),
       claim_jobs: fn(_, _, _) { panic as "test panic" },
     )
   let assert Ok(_) = bad_adapter.migrate_down()
@@ -157,11 +157,11 @@ pub fn keep_going_after_panic_test() {
 
   let assert Ok(bg) =
     bg_jobs.new(bad_adapter)
-    |> bg_jobs.add_queue(
-      bg_jobs.new_queue("default_queue")
-      |> bg_jobs.queue_add_worker(log_job.worker(logger)),
+    |> bg_jobs.with_queue(
+      queue.new("default_queue")
+      |> queue.with_worker(log_job.worker(logger)),
     )
-    |> bg_jobs.create()
+    |> bg_jobs.build()
 
   let assert Ok(queue) = chip.find(bg.queue_registry, "default_queue")
   let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
@@ -299,7 +299,7 @@ pub fn scheduled_job_test() {
       bg,
     )
 
-  process.sleep(100)
+  process.sleep(200)
 
   test_helpers.get_log(logger)
   |> should.equal([])
@@ -313,10 +313,10 @@ pub fn scheduled_job_test() {
 
 pub fn builder_test() {
   use conn <- sqlight.with_connection(":memory:")
-  let db_adapter = sqlite_db_adapter.try_new_store(conn, [])
+  let db_adapter = sqlite_db_adapter.new(conn, [])
   let test_event_listener = fn(_: events.Event) { Nil }
   let test_queue_spec =
-    bg_jobs.QueueSpec(
+    queue.Spec(
       name: "test_queue",
       workers: [],
       event_listeners: [],
@@ -330,15 +330,15 @@ pub fn builder_test() {
     bg_jobs.new(db_adapter)
     |> bg_jobs.with_supervisor_max_frequency(10)
     |> bg_jobs.with_supervisor_frequency_period(10)
-    |> bg_jobs.add_event_listener(test_event_listener)
-    |> bg_jobs.add_queue(test_queue_spec)
+    |> bg_jobs.with_event_listener(test_event_listener)
+    |> bg_jobs.with_queue(test_queue_spec)
 
   let spec2 =
     bg_jobs.new(db_adapter)
-    |> bg_jobs.add_event_listener(test_event_listener)
-    |> bg_jobs.add_queue(test_queue_spec)
-    |> bg_jobs.add_event_listener(test_event_listener)
-    |> bg_jobs.add_queue(test_queue_spec)
+    |> bg_jobs.with_event_listener(test_event_listener)
+    |> bg_jobs.with_queue(test_queue_spec)
+    |> bg_jobs.with_event_listener(test_event_listener)
+    |> bg_jobs.with_queue(test_queue_spec)
 
   spec.max_frequency |> should.equal(10)
   spec.frequency_period |> should.equal(10)
@@ -354,15 +354,15 @@ pub fn builder_test() {
 pub fn build_queue_test() {
   let test_event_listener = fn(_: events.Event) { Nil }
   let test_worker =
-    worker.Worker(job_name: "test_worker", handler: fn(_) { Ok(Nil) })
+    jobs.Worker(job_name: "test_worker", handler: fn(_) { Ok(Nil) })
 
-  bg_jobs.new_queue("test_queue")
-  |> bg_jobs.queue_with_max_retries(1)
-  |> bg_jobs.queue_with_init_timeout(2)
-  |> bg_jobs.queue_with_max_concurrent_jobs(3)
-  |> bg_jobs.queue_with_poll_interval_ms(4)
+  queue.new("test_queue")
+  |> queue.with_max_retries(1)
+  |> queue.with_init_timeout(2)
+  |> queue.with_max_concurrent_jobs(3)
+  |> queue.with_poll_interval_ms(4)
   |> should.equal(
-    bg_jobs.QueueSpec(
+    queue.Spec(
       name: "test_queue",
       workers: [],
       max_retries: 1,
@@ -373,41 +373,35 @@ pub fn build_queue_test() {
     ),
   )
 
-  bg_jobs.new_queue("test_queue")
-  |> bg_jobs.queue_with_workers([test_worker, test_worker])
+  queue.new("test_queue")
+  |> queue.with_workers([test_worker, test_worker])
   |> fn(queue) { queue.workers }
   |> list.length
   |> should.equal(2)
 
-  bg_jobs.new_queue("test_queue")
-  |> bg_jobs.queue_add_worker(test_worker)
-  |> bg_jobs.queue_add_worker(test_worker)
+  queue.new("test_queue")
+  |> queue.with_worker(test_worker)
+  |> queue.with_worker(test_worker)
   |> fn(queue) { queue.workers }
   |> list.length
   |> should.equal(2)
 
-  bg_jobs.new_queue("test_queue")
-  |> bg_jobs.queue_with_event_listeners([
-    test_event_listener,
-    test_event_listener,
-  ])
+  queue.new("test_queue")
+  |> queue.with_event_listeners([test_event_listener, test_event_listener])
   |> fn(queue) { queue.event_listeners }
   |> list.length
   |> should.equal(2)
 
-  bg_jobs.new_queue("test_queue")
-  |> bg_jobs.queue_add_event_listener(test_event_listener)
-  |> bg_jobs.queue_add_event_listener(test_event_listener)
+  queue.new("test_queue")
+  |> queue.with_event_listener(test_event_listener)
+  |> queue.with_event_listener(test_event_listener)
   |> fn(queue) { queue.event_listeners }
   |> list.length
   |> should.equal(2)
 
-  bg_jobs.new_queue("test_queue")
-  |> bg_jobs.queue_add_event_listener(test_event_listener)
-  |> bg_jobs.queue_add_event_listeners([
-    test_event_listener,
-    test_event_listener,
-  ])
+  queue.new("test_queue")
+  |> queue.with_event_listener(test_event_listener)
+  |> queue.with_event_listeners([test_event_listener, test_event_listener])
   |> fn(queue) { queue.event_listeners }
   |> list.length
   |> should.equal(3)

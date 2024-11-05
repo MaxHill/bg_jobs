@@ -9,6 +9,41 @@ import test_helpers
 import test_helpers/jobs as jobs_setup
 import test_helpers/jobs/log_job_interval
 
+pub fn test_schedule_intervals() {
+  should.equal(
+    scheduled_job.interval_milliseconds(500),
+    scheduled_job.Interval(time.Millisecond(500)),
+  )
+  should.equal(
+    scheduled_job.interval_seconds(10),
+    scheduled_job.Interval(time.Second(10)),
+  )
+  should.equal(
+    scheduled_job.interval_minutes(5),
+    scheduled_job.Interval(time.Minute(5)),
+  )
+  should.equal(
+    scheduled_job.interval_hours(2),
+    scheduled_job.Interval(time.Hour(2)),
+  )
+  should.equal(
+    scheduled_job.interval_days(1),
+    scheduled_job.Interval(time.Day(1)),
+  )
+  should.equal(
+    scheduled_job.interval_weeks(1),
+    scheduled_job.Interval(time.Week(1)),
+  )
+  should.equal(
+    scheduled_job.interval_months(6),
+    scheduled_job.Interval(time.Month(6)),
+  )
+  should.equal(
+    scheduled_job.interval_years(1),
+    scheduled_job.Interval(time.Year(1)),
+  )
+}
+
 pub fn single_interval_test() {
   use conn <- sqlight.with_connection(":memory:")
   use #(_bg, db_adapter, logger, _event_logger) <- jobs_setup.setup_interval(
@@ -16,7 +51,7 @@ pub fn single_interval_test() {
   )
 
   // Wait for jobs to process
-  process.sleep(100)
+  process.sleep(200)
 
   // Make sure the scheduled job succeded
   test_helpers.get_log(logger)
@@ -47,17 +82,13 @@ pub fn schedule_test() {
   let logger = test_helpers.new_logger()
   use #(_bg, _db_adapter, _event_logger) <- jobs_setup.setup_schedule(
     conn,
-    scheduled_job.Spec(
-      schedule: scheduled_job.Interval(time.Millisecond(10)),
-      worker: log_job_interval.worker(logger),
-      max_retries: 3,
-      init_timeout: 1000,
-      poll_interval: 10,
-      event_listeners: [],
+    scheduled_job.new(
+      log_job_interval.worker(logger),
+      scheduled_job.interval_milliseconds(10),
     ),
   )
 
-  process.sleep(100)
+  process.sleep(200)
 
   let job_list =
     sqlight.query(

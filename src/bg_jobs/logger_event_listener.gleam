@@ -1,4 +1,4 @@
-import bg_jobs/internal/errors
+import bg_jobs/errors
 import bg_jobs/internal/events
 import birl
 import gleam/string
@@ -72,6 +72,11 @@ pub fn listner(event: events.Event) {
       logging.log(
         logging.Error,
         now <> "|DbErrorEvent|response:" <> error_to_string(error),
+      )
+    events.SetupErrorEvent(error) ->
+      logging.log(
+        logging.Error,
+        now <> "|SetupErrorEvent|error: " <> string.inspect(error),
       )
   }
   Nil
