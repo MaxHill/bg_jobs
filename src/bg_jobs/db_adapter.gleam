@@ -15,7 +15,7 @@ pub type DbAdapter {
     claim_jobs: fn(List(String), Int, String) ->
       Result(List(jobs.Job), errors.BgJobError),
     release_claim: fn(String) -> Result(jobs.Job, errors.BgJobError),
-    move_job_to_succeded: fn(jobs.Job) -> Result(Nil, errors.BgJobError),
+    move_job_to_succeeded: fn(jobs.Job) -> Result(Nil, errors.BgJobError),
     move_job_to_failed: fn(jobs.Job, String) -> Result(Nil, errors.BgJobError),
     increment_attempts: fn(jobs.Job) -> Result(jobs.Job, errors.BgJobError),
     get_enqueued_jobs: fn(String) -> Result(List(jobs.Job), errors.BgJobError),

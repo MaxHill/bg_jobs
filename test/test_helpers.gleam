@@ -59,8 +59,8 @@ pub fn new_logger_event_listner(
       "JobReserved|queue_name:" <> queue_name <> "|job_name:" <> job.name
     events.JobStartEvent(queue_name, job) ->
       "JobStart|queue_name:" <> queue_name <> "|job_name:" <> job.name
-    events.JobSuccededEvent(queue_name, job) ->
-      "JobSucceded|queue_name:" <> queue_name <> "|job_name:" <> job.name
+    events.JobSucceededEvent(queue_name, job) ->
+      "JobSucceeded|queue_name:" <> queue_name <> "|job_name:" <> job.name
     events.QueueErrorEvent(queue_name, error) ->
       "QueueError|queue_name:"
       <> queue_name
@@ -76,6 +76,8 @@ pub fn new_logger_event_listner(
     events.DbErrorEvent(error) ->
       "DbErrorEvent|response:" <> string.inspect(error)
     events.SetupErrorEvent(error) -> "SetupErrorEvent" <> string.inspect(error)
+    events.DbEvent(event, input) ->
+      "DbEvent|" <> event <> "|input:" <> string.join(input, with: ",")
   }
   |> fn(str) { "Event:" <> str }
   |> log_message(logger)

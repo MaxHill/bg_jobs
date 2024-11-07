@@ -53,7 +53,7 @@ pub fn single_interval_test() {
   // Wait for jobs to process
   process.sleep(200)
 
-  // Make sure the scheduled job succeded
+  // Make sure the scheduled job succeeded
   test_helpers.get_log(logger)
   |> list.find(fn(log) { log == "test_log" })
   |> should.equal(Ok("test_log"))

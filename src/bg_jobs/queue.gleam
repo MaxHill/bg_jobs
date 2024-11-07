@@ -217,8 +217,8 @@ fn loop(
     }
 
     messages.HandleSuccess(job) -> {
-      let assert Ok(_) = state.db_adapter.move_job_to_succeded(job)
-      state.send_event(events.JobSuccededEvent(state.name, job))
+      let assert Ok(_) = state.db_adapter.move_job_to_succeeded(job)
+      state.send_event(events.JobSucceededEvent(state.name, job))
       actor.continue(QueueState(..state, active_jobs: state.active_jobs - 1))
     }
 

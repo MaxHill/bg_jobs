@@ -6,6 +6,7 @@ import bg_jobs/jobs
 import birl
 import decode
 import gleam/dynamic
+import gleam/int
 import gleam/list
 import gleam/option
 import gleam/result
@@ -19,7 +20,7 @@ pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener))
     enqueue_job: enqueue_job(conn, send_event),
     claim_jobs: claim_jobs(conn, send_event),
     release_claim: release_claim(conn, send_event),
-    move_job_to_succeded: move_job_to_succeded(conn, send_event),
+    move_job_to_succeeded: move_job_to_succeeded(conn, send_event),
     move_job_to_failed: move_job_to_failed(conn, send_event),
     increment_attempts: increment_attempts(conn, send_event),
     get_enqueued_jobs: get_enqueued_jobs(conn, send_event),
@@ -39,9 +40,9 @@ fn query(
   with arguments: List(sqlight.Value),
   expecting decoder: dynamic.Decoder(t),
 ) {
-  send_event(events.DbQueryEvent(sql, list.map(arguments, string.inspect)))
   let res =
     sqlight.query(sql, connection, arguments, decoder)
+    |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
     |> result.map_error(fn(err) {
       send_event(events.DbErrorEvent(err))
@@ -55,11 +56,12 @@ fn query(
   res
 }
 
-fn move_job_to_succeded(
+fn move_job_to_succeeded(
   conn: sqlight.Connection,
   send_event: events.EventListener,
 ) {
   fn(job: jobs.Job) {
+    send_event(events.DbEvent("move_job_to_succeeded", [string.inspect(job)]))
     use _ <- result.try(query(
       send_event,
       "DELETE FROM jobs
@@ -79,7 +81,7 @@ fn move_job_to_succeded(
         attempts, 
         created_at, 
         available_at, 
-        succeded_at
+        succeeded_at
       )
       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       RETURNING *;
@@ -97,7 +99,7 @@ fn move_job_to_succeded(
           birl.to_iso8601(birl.from_erlang_universal_datetime(job.available_at)),
         ),
       ],
-      decode_succeded_db_row,
+      decode_succeeded_db_row,
     )
     |> result.replace(Nil)
   }
@@ -108,6 +110,7 @@ fn get_succeeded_jobs(
   send_event: events.EventListener,
 ) {
   fn(limit: Int) {
+    send_event(events.DbEvent("get_succeeded_jobs", [int.to_string(limit)]))
     query(
       send_event,
       "
@@ -117,7 +120,7 @@ fn get_succeeded_jobs(
     ",
       conn,
       [sqlight.int(limit)],
-      decode_succeded_db_row,
+      decode_succeeded_db_row,
     )
     |> result.map(result.all)
     |> result.flatten
@@ -126,6 +129,7 @@ fn get_succeeded_jobs(
 
 fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
+    send_event(events.DbEvent("get_failed_jobs", [int.to_string(limit)]))
     query(
       send_event,
       "
@@ -147,6 +151,9 @@ fn move_job_to_failed(
   send_event: events.EventListener,
 ) {
   fn(job: jobs.Job, exception: String) {
+    send_event(
+      events.DbEvent("move_job_to_failed", [string.inspect(job), exception]),
+    )
     let sql =
       "DELETE FROM jobs
       WHERE id =  ?;"
@@ -200,6 +207,7 @@ fn move_job_to_failed(
 
 fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
+    send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
     let now =
       birl.now()
       |> birl.to_iso8601()
@@ -239,6 +247,7 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
 
 fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_id: String) {
+    send_event(events.DbEvent("claim_jobs", [job_id]))
     let sql =
       "
         UPDATE jobs
@@ -260,6 +269,7 @@ fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
 
 fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(queue_id: String) {
+    send_event(events.DbEvent("get_running_jobs", [queue_id]))
     query(
       send_event,
       "SELECT * FROM jobs WHERE reserved_at < CURRENT_TIMESTAMP AND reserved_by = ?",
@@ -274,6 +284,7 @@ fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) 
 
 fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_name: String) {
+    send_event(events.DbEvent("get_enqueued_jobs", [job_name]))
     query(
       send_event,
       "SELECT * FROM jobs WHERE name = ? AND reserved_at is NULL",
@@ -291,6 +302,7 @@ fn increment_attempts(
   send_event: events.EventListener,
 ) {
   fn(job: jobs.Job) {
+    send_event(events.DbEvent("increment_attempts", [job.id, job.name]))
     query(
       send_event,
       "
@@ -319,6 +331,13 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
     payload: String,
     avaliable_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   ) {
+    send_event(
+      events.DbEvent("enqueue_job", [
+        job_name,
+        payload,
+        birl.from_erlang_universal_datetime(avaliable_at) |> birl.to_iso8601(),
+      ]),
+    )
     let avaliable_at =
       birl.from_erlang_universal_datetime(avaliable_at)
       |> birl.to_iso8601()
@@ -392,11 +411,12 @@ pub fn migrate_up(conn: sqlight.Connection) {
       attempts INTEGER NOT NULL,
       created_at DATETIME NOT NULL,
       available_at DATETIME NOT NULL,
-      succeded_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+      succeeded_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
     "
 
     sqlight.exec(sql, conn)
+    |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
   }
 }
@@ -409,6 +429,7 @@ pub fn migrate_down(conn: sqlight.Connection) {
     DROP TABLE IF EXISTS jobs_succeeded;"
 
     sqlight.exec(sql, conn)
+    |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
   }
 }
@@ -472,7 +493,7 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
   |> decode.from(data)
 }
 
-pub fn decode_succeded_db_row(data: dynamic.Dynamic) {
+pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({
       use id <- decode.parameter
@@ -481,7 +502,7 @@ pub fn decode_succeded_db_row(data: dynamic.Dynamic) {
       use attempts <- decode.parameter
       use created_at_string <- decode.parameter
       use available_at_string <- decode.parameter
-      use succeded_at_string <- decode.parameter
+      use succeeded_at_string <- decode.parameter
 
       use created_at <- result.try(
         birl.from_naive(created_at_string)
@@ -495,10 +516,10 @@ pub fn decode_succeded_db_row(data: dynamic.Dynamic) {
         |> result.replace_error(errors.ParseDateError(created_at_string)),
       )
 
-      use succeded_at <- result.map(
-        birl.from_naive(succeded_at_string)
+      use succeeded_at <- result.map(
+        birl.from_naive(succeeded_at_string)
         |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(succeded_at_string)),
+        |> result.replace_error(errors.ParseDateError(succeeded_at_string)),
       )
 
       jobs.SucceededJob(
@@ -508,7 +529,7 @@ pub fn decode_succeded_db_row(data: dynamic.Dynamic) {
         attempts,
         created_at,
         available_at,
-        succeded_at,
+        succeeded_at,
       )
     })
     |> decode.field(0, decode.string)

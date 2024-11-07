@@ -1,9 +1,8 @@
 import gleam/otp/actor
-import sqlight
 
 /// Represents errors that can occur during background job processing.
 pub type BgJobError {
-  DbError(sqlight.Error)
+  DbError(String)
   ParseDateError(String)
   DispatchJobError(String)
   SetupError(actor.StartError)

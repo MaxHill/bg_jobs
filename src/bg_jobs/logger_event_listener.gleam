@@ -32,11 +32,11 @@ pub fn listner(event: events.Event) {
         Info,
         now <> "|JobStart|queue_name:" <> queue_name <> "|job_name:" <> job.name,
       )
-    events.JobSuccededEvent(queue_name, job) ->
+    events.JobSucceededEvent(queue_name, job) ->
       logging.log(
         Info,
         now
-          <> "|JobSucceded|queue_name:"
+          <> "|JobSucceeded|queue_name:"
           <> queue_name
           <> "|job_name:"
           <> job.name,
@@ -77,6 +77,15 @@ pub fn listner(event: events.Event) {
       logging.log(
         logging.Error,
         now <> "|SetupErrorEvent|error: " <> string.inspect(error),
+      )
+    events.DbEvent(event, input) ->
+      logging.log(
+        logging.Error,
+        now
+          <> "|DbEvent|"
+          <> event
+          <> "|input:"
+          <> string.join(input, with: ","),
       )
   }
   Nil

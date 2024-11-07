@@ -222,7 +222,7 @@ fn loop(message: Message, state: State) -> actor.Next(Message, State) {
     }
 
     messages.HandleError(job, exception) -> {
-      // Should always be possible to move job to succeded otherwise crash
+      // Should always be possible to move job to succeeded otherwise crash
       let assert Ok(_) = state.db_adapter.move_job_to_failed(job, exception)
       state.send_event(events.JobFailedEvent(state.name, job))
       actor.send(state.self, messages.ScheduleNext)
@@ -230,9 +230,9 @@ fn loop(message: Message, state: State) -> actor.Next(Message, State) {
     }
 
     messages.HandleSuccess(job) -> {
-      // Should always be possible to move job to succeded otherwise crash
-      let assert Ok(_) = state.db_adapter.move_job_to_succeded(job)
-      state.send_event(events.JobSuccededEvent(state.name, job))
+      // Should always be possible to move job to succeeded otherwise crash
+      let assert Ok(_) = state.db_adapter.move_job_to_succeeded(job)
+      state.send_event(events.JobSucceededEvent(state.name, job))
       actor.send(state.self, messages.ScheduleNext)
       actor.continue(state)
     }

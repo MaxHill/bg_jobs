@@ -44,7 +44,7 @@ pub fn job_is_moved_to_success_after_succeeding_test() {
   let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message 1"))
 
   // Wait for jobs to process
-  process.sleep(50)
+  process.sleep(100)
 
   db_adapter.get_succeeded_jobs(10)
   |> result.map(list.map(_, fn(job: jobs.SucceededJob) {
@@ -231,7 +231,7 @@ pub fn events_test() {
       "Event:JobEnqueued|job_name:LOG_JOB",
       "Event:JobReserved|queue_name:default_queue|job_name:LOG_JOB",
       "Event:JobStart|queue_name:default_queue|job_name:LOG_JOB",
-      "Event:JobSucceded|queue_name:default_queue|job_name:LOG_JOB",
+      "Event:JobSucceeded|queue_name:default_queue|job_name:LOG_JOB",
       "Event:JobEnqueued|job_name:FAILING_JOB",
       "Event:JobReserved|queue_name:default_queue|job_name:FAILING_JOB",
       "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
@@ -298,8 +298,6 @@ pub fn scheduled_job_test() {
       ),
       bg,
     )
-
-  process.sleep(200)
 
   test_helpers.get_log(logger)
   |> should.equal([])

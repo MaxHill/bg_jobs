@@ -72,7 +72,7 @@ pub type SucceededJob {
     attempts: Int,
     created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
     available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    succeded_at: #(#(Int, Int, Int), #(Int, Int, Int)),
+    succeeded_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   )
 }
 

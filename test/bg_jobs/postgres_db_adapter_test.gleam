@@ -1,27 +1,39 @@
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import bg_jobs/sqlite_db_adapter
+import bg_jobs/postgres_db_adapter
+import gleam/io
+import gleam/string
+
+// used for the decoders
 import birl
 import birl/duration
 import gleam/dynamic
 import gleam/erlang/process
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/order
+import gleam/pgo
 import gleeunit/should
-import sqlight
 import test_helpers
 
 const job_name = "test-job"
 
 const job_payload = "test-payload"
 
+pub fn new_db() {
+  let assert Ok(config) =
+    pgo.url_config(
+      "postgres://postgres:mySuperSecretPassword!@localhost:5432/postgres?sslmode=disable",
+    )
+  let db = pgo.connect(pgo.Config(..config, pool_size: 1))
+  let assert Ok(_) = postgres_db_adapter.migrate_down(db)()
+  let assert Ok(_) = postgres_db_adapter.migrate_up(db)()
+  db
+}
+
 pub fn enqueue_job_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(returned_job) =
     job_store.enqueue_job(
@@ -29,22 +41,20 @@ pub fn enqueue_job_test() {
       job_payload,
       birl.now() |> birl.to_erlang_datetime(),
     )
-
   process.sleep(100)
 
-  let assert Ok(jobs) =
-    sqlight.query(
-      "SELECT * FROM jobs",
+  let assert Ok(pgo.Returned(count, jobs)) =
+    pgo.execute(
+      "SELECT * FROM jobs;",
       conn,
       [],
-      sqlite_db_adapter.decode_enqueued_db_row,
+      postgres_db_adapter.decode_enqueued_db_row,
     )
 
-  list.length(jobs)
+  count
   |> should.equal(1)
 
   list.first(jobs)
-  |> should.be_ok
   |> should.be_ok
   |> fn(job) {
     should.equal(returned_job, job)
@@ -57,10 +67,8 @@ pub fn enqueue_job_test() {
 }
 
 pub fn claim_jobs_limit_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_returned_job1) =
     job_store.enqueue_job(
@@ -77,16 +85,14 @@ pub fn claim_jobs_limit_test() {
     )
 
   process.sleep(1000)
-  sqlight.query(
-    "select * from jobs",
-    conn,
-    [],
-    sqlite_db_adapter.decode_enqueued_db_row,
-  )
-  |> should.be_ok
-  |> list.length
-  |> should.equal(2)
-
+  let assert Ok(pgo.Returned(count, _jobs)) =
+    pgo.execute(
+      "SELECT * FROM jobs;",
+      conn,
+      [],
+      postgres_db_adapter.decode_enqueued_db_row,
+    )
+  count |> should.equal(2)
   job_store.claim_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
@@ -104,10 +110,8 @@ pub fn claim_jobs_limit_test() {
 }
 
 pub fn claim_jobs_returned_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -133,10 +137,8 @@ pub fn claim_jobs_returned_test() {
 }
 
 pub fn move_job_to_success_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(job) =
     job_store.enqueue_job(
@@ -148,42 +150,47 @@ pub fn move_job_to_success_test() {
   job_store.move_job_to_succeeded(job)
   |> should.be_ok
 
-  sqlight.query(
-    "SELECT * FROM jobs",
+  pgo.execute(
+    "SELECT * FROM jobs;",
     conn,
     [],
-    sqlite_db_adapter.decode_enqueued_db_row,
+    postgres_db_adapter.decode_enqueued_db_row,
   )
   |> should.be_ok()
-  |> list.length
-  |> should.equal(0)
+  |> fn(returned) {
+    let pgo.Returned(count, _rows) = returned
+    count |> should.equal(0)
+  }
 
-  sqlight.query(
-    "SELECT * FROM jobs_succeeded",
+  pgo.execute(
+    "SELECT * FROM jobs_succeeded;",
     conn,
     [],
-    sqlite_db_adapter.decode_succeeded_db_row,
+    postgres_db_adapter.decode_succeeded_db_row,
   )
   |> should.be_ok()
-  |> list.first
-  |> should.be_ok
-  |> should.be_ok
-  |> should.equal(jobs.SucceededJob(
-    id: job.id,
-    name: job.name,
-    payload: job.payload,
-    attempts: job.attempts,
-    created_at: job.created_at,
-    available_at: job.available_at,
-    succeeded_at: birl.to_erlang_universal_datetime(birl.now()),
-  ))
+  |> fn(returned) {
+    let pgo.Returned(count, rows) = returned
+    count |> should.equal(1)
+
+    let assert Ok(row) = list.first(rows)
+
+    row
+    |> should.equal(jobs.SucceededJob(
+      id: job.id,
+      name: job.name,
+      payload: job.payload,
+      attempts: job.attempts,
+      created_at: job.created_at,
+      available_at: job.available_at,
+      succeeded_at: birl.to_erlang_datetime(birl.now()),
+    ))
+  }
 }
 
 pub fn move_job_to_failed_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(job) =
     job_store.enqueue_job(
@@ -191,50 +198,51 @@ pub fn move_job_to_failed_test() {
       job_payload,
       birl.now() |> birl.to_erlang_datetime(),
     )
-
   job_store.move_job_to_failed(job, "test exception")
   |> should.be_ok
 
-  sqlight.query(
+  pgo.execute(
     "SELECT * FROM jobs",
     conn,
     [],
-    sqlite_db_adapter.decode_enqueued_db_row,
+    postgres_db_adapter.decode_enqueued_db_row,
   )
   |> should.be_ok()
-  |> list.length
-  |> should.equal(0)
+  |> fn(returned) {
+    let pgo.Returned(count, _rows) = returned
+    count |> should.equal(0)
+  }
 
-  sqlight.query(
+  pgo.execute(
     "SELECT * FROM jobs_failed",
     conn,
     [],
-    sqlite_db_adapter.decode_failed_db_row,
+    postgres_db_adapter.decode_failed_db_row,
   )
   |> should.be_ok()
-  |> list.first
-  |> should.be_ok
-  |> should.be_ok
-  |> should.equal(jobs.FailedJob(
-    id: job.id,
-    name: job.name,
-    payload: job.payload,
-    attempts: job.attempts,
-    exception: "test exception",
-    created_at: job.created_at,
-    available_at: job.available_at,
-    failed_at: birl.to_erlang_universal_datetime(birl.now()),
-  ))
+  |> fn(returned) {
+    let pgo.Returned(count, rows) = returned
+    count |> should.equal(1)
+    let assert Ok(row) = list.first(rows)
+    row
+    |> fn(row) {
+      row.id |> should.equal(job.id)
+      row.name |> should.equal(job.name)
+      row.payload |> should.equal(job.payload)
+      row.attempts |> should.equal(job.attempts)
+      row.exception |> should.equal("test exception")
+      row.created_at |> should.equal(job.created_at)
+      row.available_at |> should.equal(job.available_at)
+    }
+  }
 }
 
 pub fn get_succeeded_jobs_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_) =
-    sqlight.exec(
+    pgo.execute(
       "INSERT INTO jobs_succeeded (
       id, 
       name, 
@@ -255,6 +263,8 @@ pub fn get_succeeded_jobs_test() {
     );
     ",
       conn,
+      [],
+      utils.discard_decode,
     )
 
   job_store.get_succeeded_jobs(1)
@@ -273,13 +283,11 @@ pub fn get_succeeded_jobs_test() {
 }
 
 pub fn get_failed_jobs_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_) =
-    sqlight.exec(
+    pgo.execute(
       "INSERT INTO jobs_failed (
       id, 
       name, 
@@ -302,6 +310,8 @@ pub fn get_failed_jobs_test() {
     );
     ",
       conn,
+      [],
+      utils.discard_decode,
     )
 
   job_store.get_failed_jobs(1)
@@ -321,10 +331,8 @@ pub fn get_failed_jobs_test() {
 }
 
 pub fn increment_attempts_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(job) =
     job_store.enqueue_job(
@@ -340,51 +348,52 @@ pub fn increment_attempts_test() {
 }
 
 pub fn migrate_test() {
-  use conn <- sqlight.with_connection(":memory:")
+  let conn = new_db()
 
-  let assert Ok(_) = sqlite_db_adapter.migrate_up(conn)()
+  let assert Ok(_) = postgres_db_adapter.migrate_up(conn)()
 
   let sql =
     "
-    SELECT name 
-    FROM sqlite_master 
-    WHERE type = 'table';"
+    SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+AND table_type = 'BASE TABLE';"
 
-  sqlight.query(
+  pgo.execute(
     sql,
     conn,
     [],
     dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
   )
   |> should.be_ok
-  |> should.equal(["jobs", "jobs_failed", "jobs_succeeded"])
+  |> fn(result) {
+    let pgo.Returned(count, rows) = result
+    #(count, list.sort(rows, by: string.compare))
+  }
+  |> should.equal(#(3, ["jobs", "jobs_failed", "jobs_succeeded"]))
 
-  let assert Ok(_) = sqlite_db_adapter.migrate_down(conn)()
-  sqlight.query(
+  let assert Ok(_) = postgres_db_adapter.migrate_down(conn)()
+  pgo.execute(
     sql,
     conn,
     [],
     dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
   )
   |> should.be_ok
-  |> should.equal([])
+  |> should.equal(pgo.Returned(0, []))
 }
 
 pub fn empty_list_of_jobs_test() {
-  use conn <- sqlight.with_connection(":memory:")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   job_store.claim_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
 pub fn multiple_list_of_jobs_test() {
-  use conn <- sqlight.with_connection(":memory:")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -417,13 +426,11 @@ pub fn multiple_list_of_jobs_test() {
 
 pub fn db_events_test() {
   let event_logger = test_helpers.new_logger()
-  use conn <- sqlight.with_connection(":memory:")
+  let conn = new_db()
   let job_store =
-    sqlite_db_adapter.new(conn, [
+    postgres_db_adapter.new(conn, [
       test_helpers.new_logger_event_listner(event_logger, _),
     ])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -467,34 +474,31 @@ pub fn db_events_test() {
   // lines logged should be enough for now.
   test_helpers.get_log(event_logger)
   |> list.length()
-  |> should.equal(20)
+  |> should.equal(18)
 }
 
 pub fn release_claim_test() {
   let event_logger = test_helpers.new_logger()
-  use conn <- sqlight.with_connection(":memory:")
+  let conn = new_db()
   let job_store =
-    sqlite_db_adapter.new(conn, [
+    postgres_db_adapter.new(conn, [
       test_helpers.new_logger_event_listner(event_logger, _),
     ])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_) =
-    sqlight.query(
+    pgo.execute(
       "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
-      VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '2023-01-01 00:00:00', ?)
+      VALUES ($1, $2, $3, 0, '2023-01-01 00:00:00', '2023-01-01 00:00:00', '2023-01-01 00:00:00', $4)
       RETURNING *;",
       conn,
       [
-        sqlight.text("test_id"),
-        sqlight.text("test_job"),
-        sqlight.text("test"),
-        sqlight.text("default_queue"),
+        pgo.text("test_id"),
+        pgo.text("test_job"),
+        pgo.text("test"),
+        pgo.text("default_queue"),
       ],
       utils.discard_decode,
     )
-
   job_store.release_claim("test_id")
   |> should.be_ok
 
@@ -508,13 +512,11 @@ pub fn release_claim_test() {
 
 pub fn scheduled_job_test() {
   let event_logger = test_helpers.new_logger()
-  use conn <- sqlight.with_connection(":memory:")
+  let conn = new_db()
   let job_store =
-    sqlite_db_adapter.new(conn, [
+    postgres_db_adapter.new(conn, [
       test_helpers.new_logger_event_listner(event_logger, _),
     ])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -541,13 +543,11 @@ pub fn scheduled_job_test() {
 }
 
 pub fn get_running_jobs_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [])
 
   let assert Ok(_) =
-    sqlight.exec(
+    pgo.execute(
       "INSERT INTO jobs (
         id, 
         name, 
@@ -579,6 +579,8 @@ pub fn get_running_jobs_test() {
       );
     ",
       conn,
+      [],
+      utils.discard_decode,
     )
 
   job_store.get_running_jobs("test_queue")
@@ -598,13 +600,11 @@ pub fn get_running_jobs_test() {
 }
 
 pub fn get_enqueued_jobs_test() {
-  use conn <- sqlight.with_connection("dispatch")
-  let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let conn = new_db()
+  let job_store = postgres_db_adapter.new(conn, [])
 
   let assert Ok(_) =
-    sqlight.exec(
+    pgo.execute(
       "INSERT INTO jobs (
         id, 
         name, 
@@ -623,6 +623,8 @@ pub fn get_enqueued_jobs_test() {
       );
     ",
       conn,
+      [],
+      utils.discard_decode,
     )
 
   job_store.get_enqueued_jobs("process_order")
