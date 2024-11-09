@@ -1,6 +1,5 @@
 import bg_jobs
 import bg_jobs/db_adapter
-import bg_jobs/internal/time
 import bg_jobs/queue
 import bg_jobs/scheduled_job
 import bg_jobs/sqlite_db_adapter
@@ -88,7 +87,7 @@ pub fn setup_interval(
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_scheduled_job(
       scheduled_job.Spec(
-        schedule: scheduled_job.Interval(time.Millisecond(10)),
+        schedule: scheduled_job.Interval(scheduled_job.Millisecond(10)),
         worker: log_job_interval.worker(logger),
         max_retries: 2,
         init_timeout: 1000,
@@ -98,7 +97,7 @@ pub fn setup_interval(
     )
     |> bg_jobs.with_scheduled_job(
       scheduled_job.Spec(
-        schedule: scheduled_job.Interval(time.Millisecond(10)),
+        schedule: scheduled_job.Interval(scheduled_job.Millisecond(10)),
         worker: failing_job_interval.worker(logger),
         max_retries: 3,
         init_timeout: 1000,

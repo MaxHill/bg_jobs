@@ -5,7 +5,6 @@ import birl
 import birl/duration
 import gleam/dynamic
 import gleam/erlang/process
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/order
@@ -335,7 +334,7 @@ pub fn increment_attempts_test() {
 
   job_store.increment_attempts(job)
   |> should.be_ok
-  |> fn(j) { j.attempts }
+  |> fn(j: jobs.Job) { j.attempts }
   |> should.equal(1)
 }
 

@@ -12,7 +12,8 @@ import gleam/option
 import gleam/otp/actor
 import gleam/result
 
-/// Represents a queue that should be created under the queue supervisor
+/// Represents a queue that should be created
+///
 pub type Spec {
   Spec(
     name: String,
@@ -25,7 +26,11 @@ pub type Spec {
   )
 }
 
-/// Start building a new queue-spec that should be created under the queue supervisor
+/// Start building a new queue-spec 
+///
+/// NOTE: Name needs to be the same on restarts, but unique across all
+/// queues, even if running on different machines
+///
 pub fn new(name: String) {
   Spec(
     name: name,
@@ -39,8 +44,9 @@ pub fn new(name: String) {
 }
 
 /// Set the name of the queue
-/// NOTE: This needs to be reproducable on restarts, but unique across all queues, 
-/// even if running on different machines
+///
+/// NOTE: This needs to be the same on restarts, but unique across all
+/// queues, even if running on different machines
 ///
 pub fn with_name(spec: Spec, name: String) {
   Spec(..spec, name:)
@@ -53,7 +59,7 @@ pub fn with_max_retries(spec: Spec, max_retries: Int) {
   Spec(..spec, max_retries:)
 }
 
-/// Amount of time in milli seconds the queue is given to start
+/// Amount of time in milliseconds the queue is given to start
 ///
 pub fn with_init_timeout(spec: Spec, init_timeout: Int) {
   Spec(..spec, init_timeout:)
@@ -71,14 +77,13 @@ pub fn with_poll_interval_ms(spec: Spec, poll_interval: Int) {
   Spec(..spec, poll_interval:)
 }
 
-/// Set workers the queue will poll for and run
-/// NOTE: This will override previously added workers
+/// Add multiple workers the queue will poll for and run
 ///
 pub fn with_workers(spec: Spec, workers: List(jobs.Worker)) {
   Spec(..spec, workers: list.flatten([spec.workers, workers]))
 }
 
-/// Add a worker to the list the queue will poll for and run
+/// Add a worker the queue will poll for and run
 ///
 pub fn with_worker(spec: Spec, worker: jobs.Worker) {
   Spec(..spec, workers: list.flatten([spec.workers, [worker]]))
@@ -106,10 +111,12 @@ pub fn with_event_listener(spec: Spec, event_listener: events.EventListener) {
 }
 
 /// Create the actual queue actor
-/// NOTE: This will, clear all in flight jobs for this queues name
+///
+/// NOTE: This will, clear all in flight jobs for this queue name
 /// therefore it's important to have a unique name across all queues, 
 /// even if running on different machine
 ///
+@internal
 pub fn build(
   registry registry: registries.QueueRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,

@@ -1,22 +1,21 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/internal/events
+import bg_jobs/internal/postgres_db_adapter/sql
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import bg_jobs/postgres_db_adapter/sql
 import birl
 import decode
 import gleam/dynamic
 import gleam/int
-import gleam/io
 import gleam/list
-import gleam/option
 import gleam/pgo
 import gleam/result
 import gleam/string
-import sqlight
 import youid/uuid
 
+/// Create a new postgres_db_adapter
+/// 
 pub fn new(conn: pgo.Connection, event_listners: List(events.EventListener)) {
   let send_event = events.send_event(event_listners, _)
   db_adapter.DbAdapter(
@@ -407,6 +406,7 @@ fn enqueue_job(conn: pgo.Connection, send_event: events.EventListener) {
   }
 }
 
+@internal
 pub fn migrate_up(conn: pgo.Connection) {
   fn() {
     use _ <- result.try(
@@ -477,6 +477,7 @@ pub fn migrate_up(conn: pgo.Connection) {
   }
 }
 
+@internal
 pub fn migrate_down(conn: pgo.Connection) {
   fn() {
     use _ <- result.try(
@@ -508,6 +509,7 @@ pub fn migrate_down(conn: pgo.Connection) {
   }
 }
 
+@internal
 pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({
@@ -543,6 +545,7 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
   |> decode.from(data)
 }
 
+@internal
 pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({
@@ -575,6 +578,7 @@ pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
   |> decode.from(data)
 }
 
+@internal
 pub fn decode_failed_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({

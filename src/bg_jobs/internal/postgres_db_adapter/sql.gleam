@@ -3,7 +3,7 @@ import gleam/option.{type Option}
 import gleam/pgo
 
 /// A row you get from running the `release_claim` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/release_claim.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_claim.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -22,7 +22,7 @@ pub type ReleaseClaimRow {
 }
 
 /// Runs the `release_claim` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/release_claim.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_claim.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -72,7 +72,7 @@ RETURNING
 }
 
 /// A row you get from running the `insert_succeeded_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/insert_succeeded_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_succeeded_job.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -90,13 +90,12 @@ pub type InsertSucceededJobRow {
 }
 
 /// Runs the `insert_succeeded_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/insert_succeeded_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_succeeded_job.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7,
-) {
+pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7) {
   let decoder =
     decode.into({
       use id <- decode.parameter
@@ -155,7 +154,7 @@ RETURNING
 }
 
 /// A row you get from running the `get_failed_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_failed_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_failed_jobs.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -174,7 +173,7 @@ pub type GetFailedJobsRow {
 }
 
 /// Runs the `get_failed_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_failed_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_failed_jobs.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -221,7 +220,7 @@ LIMIT
 }
 
 /// Runs the `delete_enqueued_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/delete_enqueued_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/delete_enqueued_job.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -238,7 +237,7 @@ WHERE
 }
 
 /// A row you get from running the `get_succeeded_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -256,7 +255,7 @@ pub type GetSucceededJobsRow {
 }
 
 /// Runs the `get_succeeded_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -300,7 +299,7 @@ LIMIT
 }
 
 /// A row you get from running the `increment_attempts` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/increment_attempts.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/increment_attempts.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -319,7 +318,7 @@ pub type IncrementAttemptsRow {
 }
 
 /// Runs the `increment_attempts` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/increment_attempts.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/increment_attempts.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -362,13 +361,13 @@ SET
 WHERE
     id = $1
 RETURNING
-    *
+    *;
 "
   |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
 }
 
 /// A row you get from running the `insert_failed_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/insert_failed_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_failed_job.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -387,7 +386,7 @@ pub type InsertFailedJobRow {
 }
 
 /// Runs the `insert_failed_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/insert_failed_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_failed_job.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -466,7 +465,7 @@ RETURNING
 }
 
 /// A row you get from running the `enqueue_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/enqueue_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/enqueue_job.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -485,7 +484,7 @@ pub type EnqueueJobRow {
 }
 
 /// Runs the `enqueue_job` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/enqueue_job.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/enqueue_job.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -549,7 +548,7 @@ RETURNING
 }
 
 /// A row you get from running the `get_enqueued_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -568,7 +567,7 @@ pub type GetEnqueuedJobsRow {
 }
 
 /// Runs the `get_enqueued_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -616,7 +615,7 @@ WHERE
 }
 
 /// A row you get from running the `get_running_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_running_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_running_jobs.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v1.7.1 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -635,7 +634,7 @@ pub type GetRunningJobsRow {
 }
 
 /// Runs the `get_running_jobs` query
-/// defined in `./src/bg_jobs/postgres_db_adapter/sql/get_running_jobs.sql`.
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_running_jobs.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v1.7.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -681,7 +680,6 @@ WHERE
 "
   |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
 }
-
 
 // --- UTILS -------------------------------------------------------------------
 

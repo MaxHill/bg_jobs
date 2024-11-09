@@ -1,7 +1,6 @@
 import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/postgres_db_adapter
-import gleam/io
 import gleam/string
 
 // used for the decoders
@@ -225,7 +224,7 @@ pub fn move_job_to_failed_test() {
     count |> should.equal(1)
     let assert Ok(row) = list.first(rows)
     row
-    |> fn(row) {
+    |> fn(row: jobs.FailedJob) {
       row.id |> should.equal(job.id)
       row.name |> should.equal(job.name)
       row.payload |> should.equal(job.payload)
@@ -343,7 +342,7 @@ pub fn increment_attempts_test() {
 
   job_store.increment_attempts(job)
   |> should.be_ok
-  |> fn(j) { j.attempts }
+  |> fn(j: jobs.Job) { j.attempts }
   |> should.equal(1)
 }
 

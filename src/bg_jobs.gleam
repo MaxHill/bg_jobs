@@ -354,7 +354,7 @@ fn supervisor_ready() {
 // Api
 //---------------
 
-// Reexport job builder
+// Reexport job
 
 /// Create a new job request that can be enqueued
 ///

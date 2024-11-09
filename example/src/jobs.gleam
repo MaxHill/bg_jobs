@@ -13,28 +13,28 @@ pub fn setup(conn: sqlight.Connection) {
   let assert Ok(_) = db_adapter.migrate_up()
 
   bg_jobs.new(db_adapter)
-  |> bg_jobs.add_event_listener(logger_event_listener.listner)
+  |> bg_jobs.with_event_listener(logger_event_listener.listner)
   // Queues
-  |> bg_jobs.add_queue(default_queue())
-  |> bg_jobs.add_queue(second_queue())
+  |> bg_jobs.with_queue(default_queue())
+  |> bg_jobs.with_queue(second_queue())
   // Scheduled jobs
-  |> bg_jobs.add_scheduled_job(scheduled_job.new(
+  |> bg_jobs.with_scheduled_job(scheduled_job.new(
     cleanup_db_job.worker(),
     scheduled_job.interval_minutes(1),
   ))
-  |> bg_jobs.add_scheduled_job(scheduled_job.new(
+  |> bg_jobs.with_scheduled_job(scheduled_job.new(
     delete_expired_sessions_job.worker(),
     scheduled_job.Schedule(
       scheduled_job.new_schedule()
       |> scheduled_job.on_second(10),
     ),
   ))
-  |> bg_jobs.create()
+  |> bg_jobs.build()
 }
 
 fn default_queue() {
   queue.new("default_queue")
-  |> queue.add_worker(send_email_job.worker())
+  |> queue.with_worker(send_email_job.worker())
 }
 
 fn second_queue() {

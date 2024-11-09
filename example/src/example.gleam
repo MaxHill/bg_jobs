@@ -50,6 +50,7 @@ fn home_page(_req: wisp.Request, ctx: Context) {
       [],
       sqlite_db_adapter.decode_enqueued_db_row,
     )
+    |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
     |> result.map(result.all)
     |> result.flatten

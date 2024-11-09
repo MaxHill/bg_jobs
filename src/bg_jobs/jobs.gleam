@@ -1,5 +1,3 @@
-import birl
-import birl/duration
 import gleam/option
 
 // Job
@@ -61,9 +59,8 @@ pub fn with_available_in(job_request: JobEnqueueRequest, availabile_in: Int) {
   JobEnqueueRequest(..job_request, availability: AvailableIn(availabile_in))
 }
 
-/// Holds data about the outcome of processed a job.
+/// Represents data about a succeeded job.
 ///
-/// It can either be a successful job or a failed job.
 pub type SucceededJob {
   SucceededJob(
     id: String,
@@ -76,6 +73,8 @@ pub type SucceededJob {
   )
 }
 
+/// Represents data about a failed job.
+///
 pub type FailedJob {
   FailedJob(
     id: String,
@@ -92,9 +91,12 @@ pub type FailedJob {
 // Worker
 //---------------
 
-/// Represents a job worker responsible for executing specific tasks.
+/// Represents a job-worker responsible for executing specific job.
 ///
-/// Each job must implement this type, defining the job name and its execution logic.
+/// This is then what's registered to a queue or scheduled job.
+/// Each job must implement this type, defining the job name and 
+/// its execution logic.
+/// 
 ///
 /// ## Example
 ///

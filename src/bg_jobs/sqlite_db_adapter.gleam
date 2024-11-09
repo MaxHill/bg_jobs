@@ -378,6 +378,7 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
   }
 }
 
+@internal
 pub fn migrate_up(conn: sqlight.Connection) {
   fn() {
     let sql =
@@ -421,6 +422,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
   }
 }
 
+@internal
 pub fn migrate_down(conn: sqlight.Connection) {
   fn() {
     let sql =
@@ -437,6 +439,7 @@ pub fn migrate_down(conn: sqlight.Connection) {
 // Decode
 //---------------
 
+@internal
 pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({
@@ -493,6 +496,7 @@ pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
   |> decode.from(data)
 }
 
+@internal
 pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({
@@ -544,6 +548,7 @@ pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
   |> decode.from(data)
 }
 
+@internal
 pub fn decode_failed_db_row(data: dynamic.Dynamic) {
   let decoder =
     decode.into({

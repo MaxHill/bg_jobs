@@ -28,7 +28,7 @@ pub fn handler(job: jobs.Job) {
 }
 
 pub fn dispatch(bg: bg_jobs.BgJobs, to to: String, message message: String) {
-  jobs.new_job(job_name, to_string(Payload(to, message)))
+  jobs.new(job_name, to_string(Payload(to, message)))
   |> bg_jobs.enqueue_job(bg)
 }
 

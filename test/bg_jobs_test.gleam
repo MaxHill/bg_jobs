@@ -93,7 +93,7 @@ pub fn failing_job_test() {
   |> should.be_ok
   |> list.first
   |> should.be_ok
-  |> fn(failed_job) {
+  |> fn(failed_job: jobs.FailedJob) {
     failed_job.attempts
     |> should.equal(3)
   }
@@ -135,7 +135,7 @@ pub fn handle_no_worker_found_test() {
   |> should.be_ok
   |> list.first
   |> should.be_ok
-  |> fn(job) {
+  |> fn(job: jobs.FailedJob) {
     job.name
     |> should.equal("DOES_NOT_EXIST")
 
@@ -373,14 +373,14 @@ pub fn build_queue_test() {
 
   queue.new("test_queue")
   |> queue.with_workers([test_worker, test_worker])
-  |> fn(queue) { queue.workers }
+  |> fn(queue: queue.Spec) { queue.workers }
   |> list.length
   |> should.equal(2)
 
   queue.new("test_queue")
   |> queue.with_worker(test_worker)
   |> queue.with_worker(test_worker)
-  |> fn(queue) { queue.workers }
+  |> fn(queue: queue.Spec) { queue.workers }
   |> list.length
   |> should.equal(2)
 

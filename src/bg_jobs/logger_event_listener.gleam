@@ -4,6 +4,8 @@ import birl
 import gleam/string
 import logging.{Info}
 
+/// Listen to events and logg them using the [logging](https://hexdocs.pm/logging/) library
+///
 pub fn listner(event: events.Event) {
   let now = birl.now() |> birl.to_iso8601()
   case event {
