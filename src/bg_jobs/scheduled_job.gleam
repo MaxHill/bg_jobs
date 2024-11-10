@@ -31,7 +31,7 @@ pub type Spec {
 
 pub type Schedule {
   Interval(Duration)
-  Schedule(CronSchedule)
+  Schedule(ScheduleBuilder)
 }
 
 // Interval
@@ -103,8 +103,8 @@ pub fn new_interval_years(years: Int) {
 
 // Schdedule
 //---------------
-pub type CronSchedule {
-  CronSchedule(
+pub type ScheduleBuilder {
+  ScheduleBuilder(
     second: TimeValue,
     minute: TimeValue,
     hour: TimeValue,
@@ -126,8 +126,8 @@ pub type TimeSelection {
 
 /// Create a new schedule that runs on the first second
 /// every minut
-pub fn new_schedule() -> CronSchedule {
-  CronSchedule(
+pub fn new_schedule() -> ScheduleBuilder {
+  ScheduleBuilder(
     second: Specific([Value(0)]),
     minute: Every,
     hour: Every,
@@ -140,8 +140,8 @@ pub fn new_schedule() -> CronSchedule {
 // Second 
 //---------------
 /// Sets the schedule to trigger every second.
-pub fn every_second(self: CronSchedule) -> CronSchedule {
-  CronSchedule(
+pub fn every_second(self: ScheduleBuilder) -> ScheduleBuilder {
+  ScheduleBuilder(
     Every,
     self.minute,
     self.hour,
@@ -157,13 +157,13 @@ pub fn every_second(self: CronSchedule) -> CronSchedule {
 /// Note: the default value is to trigger on second 0 so you would 
 /// need to set it to every second first and then to a specific to 
 /// only get that 
-pub fn on_second(self: CronSchedule, second: Int) -> CronSchedule {
+pub fn on_second(self: ScheduleBuilder, second: Int) -> ScheduleBuilder {
   let second = case self.second {
     Every -> Specific([Value(second)])
     Specific(values) -> Specific(list.flatten([values, [Value(second)]]))
   }
 
-  CronSchedule(
+  ScheduleBuilder(
     second,
     self.minute,
     self.hour,
@@ -174,12 +174,16 @@ pub fn on_second(self: CronSchedule, second: Int) -> CronSchedule {
 }
 
 /// Sets a range of seconds during which the schedule should trigger.
-pub fn between_seconds(self: CronSchedule, start: Int, end: Int) -> CronSchedule {
+pub fn between_seconds(
+  self: ScheduleBuilder,
+  start: Int,
+  end: Int,
+) -> ScheduleBuilder {
   let second = case self.second {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     second,
     self.minute,
     self.hour,
@@ -193,7 +197,7 @@ pub fn between_seconds(self: CronSchedule, start: Int, end: Int) -> CronSchedule
 //---------------
 /// Adds a specific minute at which the schedule should trigger.
 /// If other specific minutes are already set, appends the given minute.
-pub fn on_minute(self: CronSchedule, value: Int) -> CronSchedule {
+pub fn on_minute(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
   let minute = case self.minute {
     Every -> {
       Specific([Value(value)])
@@ -202,7 +206,7 @@ pub fn on_minute(self: CronSchedule, value: Int) -> CronSchedule {
       Specific(list.flatten([values, [Value(value)]]))
     }
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     minute,
     self.hour,
@@ -213,12 +217,16 @@ pub fn on_minute(self: CronSchedule, value: Int) -> CronSchedule {
 }
 
 /// Sets a range of minutes during which the schedule should trigger.
-pub fn between_minutes(self: CronSchedule, start: Int, end: Int) -> CronSchedule {
+pub fn between_minutes(
+  self: ScheduleBuilder,
+  start: Int,
+  end: Int,
+) -> ScheduleBuilder {
   let minute = case self.minute {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     minute,
     self.hour,
@@ -232,12 +240,12 @@ pub fn between_minutes(self: CronSchedule, start: Int, end: Int) -> CronSchedule
 //---------------
 /// Adds a specific hour at which the schedule should trigger.
 /// If other specific hours are already set, appends the given hour.
-pub fn on_hour(self: CronSchedule, value: Int) -> CronSchedule {
+pub fn on_hour(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
   let hour = case self.hour {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     hour,
@@ -248,12 +256,16 @@ pub fn on_hour(self: CronSchedule, value: Int) -> CronSchedule {
 }
 
 /// Sets a range of hours during which the schedule should trigger.
-pub fn between_hours(self: CronSchedule, start: Int, end: Int) -> CronSchedule {
+pub fn between_hours(
+  self: ScheduleBuilder,
+  start: Int,
+  end: Int,
+) -> ScheduleBuilder {
   let hour = case self.hour {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     hour,
@@ -269,12 +281,12 @@ pub fn between_hours(self: CronSchedule, start: Int, end: Int) -> CronSchedule {
 
 /// Adds a specific day of the month on which the schedule should trigger.
 /// If other specific days are already set, appends the given day.
-pub fn on_day_of_month(self: CronSchedule, value: Int) -> CronSchedule {
+pub fn on_day_of_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
   let day_of_month = case self.day_of_month {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -286,15 +298,15 @@ pub fn on_day_of_month(self: CronSchedule, value: Int) -> CronSchedule {
 
 /// Sets a range of days of the month during which the schedule should trigger.
 pub fn between_day_of_months(
-  self: CronSchedule,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> CronSchedule {
+) -> ScheduleBuilder {
   let day_of_month = case self.day_of_month {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -310,12 +322,12 @@ pub fn between_day_of_months(
 
 /// Adds a specific month in which the schedule should trigger.
 /// If other specific months are already set, appends the given month.
-pub fn on_month(self: CronSchedule, value: Int) -> CronSchedule {
+pub fn on_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
   let month = case self.month {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -326,12 +338,16 @@ pub fn on_month(self: CronSchedule, value: Int) -> CronSchedule {
 }
 
 /// Sets a range of months during which the schedule should trigger.
-pub fn between_months(self: CronSchedule, start: Int, end: Int) -> CronSchedule {
+pub fn between_months(
+  self: ScheduleBuilder,
+  start: Int,
+  end: Int,
+) -> ScheduleBuilder {
   let month = case self.month {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -342,62 +358,62 @@ pub fn between_months(self: CronSchedule, start: Int, end: Int) -> CronSchedule 
 }
 
 /// Shortcut function to set the schedule to trigger in January.
-pub fn on_januaries(self: CronSchedule) {
+pub fn on_januaries(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in February.
-pub fn on_februaries(self: CronSchedule) {
+pub fn on_februaries(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in March.
-pub fn on_marches(self: CronSchedule) {
+pub fn on_marches(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in April.
-pub fn on_aprils(self: CronSchedule) {
+pub fn on_aprils(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in May.
-pub fn on_mays(self: CronSchedule) {
+pub fn on_mays(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in June.
-pub fn on_junes(self: CronSchedule) {
+pub fn on_junes(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in July.
-pub fn on_julies(self: CronSchedule) {
+pub fn on_julies(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in August.
-pub fn on_augusts(self: CronSchedule) {
+pub fn on_augusts(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in September.
-pub fn on_septembers(self: CronSchedule) {
+pub fn on_septembers(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in October.
-pub fn on_octobers(self: CronSchedule) {
+pub fn on_octobers(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in November.
-pub fn on_novembers(self: CronSchedule) {
+pub fn on_novembers(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in December.
-pub fn on_decembers(self: CronSchedule) {
+pub fn on_decembers(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
@@ -406,12 +422,12 @@ pub fn on_decembers(self: CronSchedule) {
 
 /// Adds a specific day of the week on which the schedule should trigger.
 /// If other specific days are already set, appends the given day.
-pub fn on_day_of_week(self: CronSchedule, value: Int) -> CronSchedule {
+pub fn on_day_of_week(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
   let on_day_of_week = case self.day_of_week {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -423,15 +439,15 @@ pub fn on_day_of_week(self: CronSchedule, value: Int) -> CronSchedule {
 
 /// Sets a range of days of the week during which the schedule should trigger.
 pub fn between_day_of_weeks(
-  self: CronSchedule,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> CronSchedule {
+) -> ScheduleBuilder {
   let on_day_of_week = case self.day_of_week {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  CronSchedule(
+  ScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -442,42 +458,42 @@ pub fn between_day_of_weeks(
 }
 
 /// Shortcut function to set the schedule to trigger on Mondays.
-pub fn on_mondays(self: CronSchedule) {
+pub fn on_mondays(self: ScheduleBuilder) {
   on_day_of_week(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger on Thuesdays.
-pub fn on_thuesdays(self: CronSchedule) {
+pub fn on_thuesdays(self: ScheduleBuilder) {
   on_day_of_week(self, 2)
 }
 
 /// Shortcut function to set the schedule to trigger on Wednesdays.
-pub fn on_wednesdays(self: CronSchedule) {
+pub fn on_wednesdays(self: ScheduleBuilder) {
   on_day_of_week(self, 3)
 }
 
 /// Shortcut function to set the schedule to trigger on Thursdays.
-pub fn on_thursdays(self: CronSchedule) {
+pub fn on_thursdays(self: ScheduleBuilder) {
   on_day_of_week(self, 4)
 }
 
 /// Shortcut function to set the schedule to trigger on Fridays.
-pub fn on_fridays(self: CronSchedule) {
+pub fn on_fridays(self: ScheduleBuilder) {
   on_day_of_week(self, 5)
 }
 
 /// Shortcut function to set the schedule to trigger on Saturdays.
-pub fn on_saturdays(self: CronSchedule) {
+pub fn on_saturdays(self: ScheduleBuilder) {
   on_day_of_week(self, 6)
 }
 
 /// Shortcut function to set the schedule to trigger on Sundays.
-pub fn on_sundays(self: CronSchedule) {
+pub fn on_sundays(self: ScheduleBuilder) {
   on_day_of_week(self, 7)
 }
 
 /// Shortcut function to set the schedule to trigger on weekdays (Monday through Friday).
-pub fn on_weekdays(self: CronSchedule) {
+pub fn on_weekdays(self: ScheduleBuilder) {
   self
   |> on_mondays
   |> on_thuesdays
@@ -487,12 +503,12 @@ pub fn on_weekdays(self: CronSchedule) {
 }
 
 /// Shortcut function to set the schedule to trigger on weekends (Saturday and Sunday).
-pub fn on_weekends(self: CronSchedule) {
+pub fn on_weekends(self: ScheduleBuilder) {
   self |> on_saturdays |> on_sundays
 }
 
-/// Convert the CronSchedule to actual cron syntax
-pub fn to_cron_syntax(self: CronSchedule) -> String {
+/// Convert the ScheduleBuilder to actual cron syntax
+pub fn to_cron_syntax(self: ScheduleBuilder) -> String {
   let second_str = time_value_to_string(self.second)
   let minute_str = time_value_to_string(self.minute)
   let hour_str = time_value_to_string(self.hour)
@@ -531,6 +547,12 @@ fn time_selection_to_string(selection: TimeSelection) -> String {
     Value(v) -> int.to_string(v)
     Range(start, end) -> int.to_string(start) <> "-" <> int.to_string(end)
   }
+}
+
+/// Create Schedule from scheduleBuilder
+pub fn build_schedule(schedule: ScheduleBuilder) {
+  schedule
+  |> Schedule
 }
 
 // Builder
