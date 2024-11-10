@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  test_and_publish:
     runs-on: ubuntu-latest
     services:
       postgres:

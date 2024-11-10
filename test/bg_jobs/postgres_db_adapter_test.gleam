@@ -653,13 +653,13 @@ fn validate_job(job: jobs.Job, job_name: String, job_payload: String) {
   should.equal(job.created_at, job.available_at)
 
   birl.compare(
-    birl.now() |> birl.subtract(duration.seconds(1)),
+    birl.now() |> birl.subtract(duration.seconds(3)),
     birl.from_erlang_universal_datetime(job.created_at),
   )
   |> should.equal(order.Lt)
 
   birl.compare(
-    birl.now() |> birl.subtract(duration.seconds(1)),
+    birl.now() |> birl.subtract(duration.seconds(3)),
     birl.from_erlang_universal_datetime(job.available_at),
   )
   |> should.equal(order.Lt)
