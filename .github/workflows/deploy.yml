@@ -1,0 +1,47 @@
+name: publish
+
+on:
+  push:
+    tags:        
+      - '*'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres # Docker Hub image
+        env:
+          POSTGRES_PASSWORD: mySuperSecretPassword!
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
+    steps:
+      - name: Load secret
+        uses: 1password/load-secrets-action@v2
+        with:
+          # Export loaded secrets as environment variables
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: "${{secrets.OP_SERVICE_ACCOUNT_TOKEN}}"
+          HEXPM_USER: "op://hex/Hex/username"
+          HEXPM_PASS: "op://hex/Hex/password"
+
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26.0.2"
+          gleam-version: "1.5.1"
+          rebar3-version: "3"
+          elixir-version: "1.15.4"
+      - run: gleam deps download
+      - run: gleam test
+      - run: gleam format --check src test
+      - run: gleam publish --yes
