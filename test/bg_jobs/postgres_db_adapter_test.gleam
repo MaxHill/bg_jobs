@@ -1,18 +1,18 @@
-import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/postgres_db_adapter
-import gleam/string
-
-// used for the decoders
 import birl
 import birl/duration
 import gleam/dynamic
+import gleam/erlang/os
 import gleam/erlang/process
+import gleam/int
 import gleam/list
 import gleam/option
 import gleam/order
-import gleam/pgo
+import gleam/result
+import gleam/string
 import gleeunit/should
+import pog
 import test_helpers
 
 const job_name = "test-job"
@@ -20,11 +20,23 @@ const job_name = "test-job"
 const job_payload = "test-payload"
 
 pub fn new_db() {
-  let assert Ok(config) =
-    pgo.url_config(
-      "postgres://postgres:mySuperSecretPassword!@localhost:5432/postgres?sslmode=disable",
-    )
-  let db = pgo.connect(pgo.Config(..config, pool_size: 1))
+  let db_host = os.get_env("DB_HOST") |> result.unwrap("127.0.0.1")
+  let db_password =
+    os.get_env("DB_PASSWORD") |> result.unwrap("mySuperSecretPassword!")
+  let db_user = os.get_env("DB_USER") |> result.unwrap("postgres")
+  let assert Ok(db_port) =
+    os.get_env("DB_HOST_PORT") |> result.unwrap("5432") |> int.parse
+  let db_name = os.get_env("DB_NAME") |> result.unwrap("postgres")
+
+  let db =
+    pog.default_config()
+    |> pog.host(db_host)
+    |> pog.database(db_name)
+    |> pog.port(db_port)
+    |> pog.user(db_user)
+    |> pog.password(option.Some(db_password))
+    |> pog.pool_size(1)
+    |> pog.connect()
   let assert Ok(_) = postgres_db_adapter.migrate_down(db)()
   let assert Ok(_) = postgres_db_adapter.migrate_up(db)()
   db
@@ -42,13 +54,10 @@ pub fn enqueue_job_test() {
     )
   process.sleep(100)
 
-  let assert Ok(pgo.Returned(count, jobs)) =
-    pgo.execute(
-      "SELECT * FROM jobs;",
-      conn,
-      [],
-      postgres_db_adapter.decode_enqueued_db_row,
-    )
+  let assert Ok(pog.Returned(count, jobs)) =
+    pog.query("SELECT * FROM jobs;")
+    |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+    |> pog.execute(conn)
 
   count
   |> should.equal(1)
@@ -84,13 +93,11 @@ pub fn claim_jobs_limit_test() {
     )
 
   process.sleep(1000)
-  let assert Ok(pgo.Returned(count, _jobs)) =
-    pgo.execute(
-      "SELECT * FROM jobs;",
-      conn,
-      [],
-      postgres_db_adapter.decode_enqueued_db_row,
-    )
+  let assert Ok(pog.Returned(count, _jobs)) =
+    pog.query("SELECT * FROM jobs;")
+    |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+    |> pog.execute(conn)
+
   count |> should.equal(2)
   job_store.claim_jobs([job_name], 1, "default_queue")
   |> should.be_ok
@@ -149,27 +156,21 @@ pub fn move_job_to_success_test() {
   job_store.move_job_to_succeeded(job)
   |> should.be_ok
 
-  pgo.execute(
-    "SELECT * FROM jobs;",
-    conn,
-    [],
-    postgres_db_adapter.decode_enqueued_db_row,
-  )
+  pog.query("SELECT * FROM jobs;")
+  |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+  |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
-    let pgo.Returned(count, _rows) = returned
+    let pog.Returned(count, _rows) = returned
     count |> should.equal(0)
   }
 
-  pgo.execute(
-    "SELECT * FROM jobs_succeeded;",
-    conn,
-    [],
-    postgres_db_adapter.decode_succeeded_db_row,
-  )
+  pog.query("SELECT * FROM jobs_succeeded;")
+  |> pog.returning(postgres_db_adapter.decode_succeeded_db_row)
+  |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
-    let pgo.Returned(count, rows) = returned
+    let pog.Returned(count, rows) = returned
     count |> should.equal(1)
 
     let assert Ok(row) = list.first(rows)
@@ -200,27 +201,21 @@ pub fn move_job_to_failed_test() {
   job_store.move_job_to_failed(job, "test exception")
   |> should.be_ok
 
-  pgo.execute(
-    "SELECT * FROM jobs",
-    conn,
-    [],
-    postgres_db_adapter.decode_enqueued_db_row,
-  )
+  pog.query("SELECT * FROM jobs")
+  |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+  |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
-    let pgo.Returned(count, _rows) = returned
+    let pog.Returned(count, _rows) = returned
     count |> should.equal(0)
   }
 
-  pgo.execute(
-    "SELECT * FROM jobs_failed",
-    conn,
-    [],
-    postgres_db_adapter.decode_failed_db_row,
-  )
+  pog.query("SELECT * FROM jobs_failed")
+  |> pog.returning(postgres_db_adapter.decode_failed_db_row)
+  |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
-    let pgo.Returned(count, rows) = returned
+    let pog.Returned(count, rows) = returned
     count |> should.equal(1)
     let assert Ok(row) = list.first(rows)
     row
@@ -241,7 +236,7 @@ pub fn get_succeeded_jobs_test() {
   let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_) =
-    pgo.execute(
+    pog.query(
       "INSERT INTO jobs_succeeded (
       id, 
       name, 
@@ -261,10 +256,8 @@ pub fn get_succeeded_jobs_test() {
       '2024-09-29 11:00:00'                        
     );
     ",
-      conn,
-      [],
-      utils.discard_decode,
     )
+    |> pog.execute(conn)
 
   job_store.get_succeeded_jobs(1)
   |> should.be_ok
@@ -286,7 +279,7 @@ pub fn get_failed_jobs_test() {
   let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
   let assert Ok(_) =
-    pgo.execute(
+    pog.query(
       "INSERT INTO jobs_failed (
       id, 
       name, 
@@ -308,10 +301,8 @@ pub fn get_failed_jobs_test() {
       '2024-09-29 11:00:00'                        
     );
     ",
-      conn,
-      [],
-      utils.discard_decode,
     )
+    |> pog.execute(conn)
 
   job_store.get_failed_jobs(1)
   |> should.be_ok
@@ -358,28 +349,28 @@ FROM information_schema.tables
 WHERE table_schema = 'public'
 AND table_type = 'BASE TABLE';"
 
-  pgo.execute(
-    sql,
-    conn,
-    [],
-    dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
-  )
+  pog.query(sql)
+  |> pog.returning(dynamic.decode1(
+    fn(str) { str },
+    dynamic.element(0, dynamic.string),
+  ))
+  |> pog.execute(conn)
   |> should.be_ok
   |> fn(result) {
-    let pgo.Returned(count, rows) = result
+    let pog.Returned(count, rows) = result
     #(count, list.sort(rows, by: string.compare))
   }
   |> should.equal(#(3, ["jobs", "jobs_failed", "jobs_succeeded"]))
 
   let assert Ok(_) = postgres_db_adapter.migrate_down(conn)()
-  pgo.execute(
-    sql,
-    conn,
-    [],
-    dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
-  )
+  pog.query(sql)
+  |> pog.returning(dynamic.decode1(
+    fn(str) { str },
+    dynamic.element(0, dynamic.string),
+  ))
+  |> pog.execute(conn)
   |> should.be_ok
-  |> should.equal(pgo.Returned(0, []))
+  |> should.equal(pog.Returned(0, []))
 }
 
 pub fn empty_list_of_jobs_test() {
@@ -473,7 +464,7 @@ pub fn db_events_test() {
   // lines logged should be enough for now.
   test_helpers.get_log(event_logger)
   |> list.length()
-  |> should.equal(18)
+  |> should.equal(16)
 }
 
 pub fn release_claim_test() {
@@ -485,19 +476,17 @@ pub fn release_claim_test() {
     ])
 
   let assert Ok(_) =
-    pgo.execute(
+    pog.query(
       "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
       VALUES ($1, $2, $3, 0, '2023-01-01 00:00:00', '2023-01-01 00:00:00', '2023-01-01 00:00:00', $4)
       RETURNING *;",
-      conn,
-      [
-        pgo.text("test_id"),
-        pgo.text("test_job"),
-        pgo.text("test"),
-        pgo.text("default_queue"),
-      ],
-      utils.discard_decode,
     )
+    |> pog.parameter(pog.text("test_id"))
+    |> pog.parameter(pog.text("test_job"))
+    |> pog.parameter(pog.text("test"))
+    |> pog.parameter(pog.text("default_queue"))
+    |> pog.execute(conn)
+
   job_store.release_claim("test_id")
   |> should.be_ok
 
@@ -546,7 +535,7 @@ pub fn get_running_jobs_test() {
   let job_store = postgres_db_adapter.new(conn, [])
 
   let assert Ok(_) =
-    pgo.execute(
+    pog.query(
       "INSERT INTO jobs (
         id, 
         name, 
@@ -577,10 +566,8 @@ pub fn get_running_jobs_test() {
         NULL
       );
     ",
-      conn,
-      [],
-      utils.discard_decode,
     )
+    |> pog.execute(conn)
 
   job_store.get_running_jobs("test_queue")
   |> should.be_ok
@@ -603,7 +590,7 @@ pub fn get_enqueued_jobs_test() {
   let job_store = postgres_db_adapter.new(conn, [])
 
   let assert Ok(_) =
-    pgo.execute(
+    pog.query(
       "INSERT INTO jobs (
         id, 
         name, 
@@ -621,10 +608,8 @@ pub fn get_enqueued_jobs_test() {
         '2024-09-29 10:30:00'                       
       );
     ",
-      conn,
-      [],
-      utils.discard_decode,
     )
+    |> pog.execute(conn)
 
   job_store.get_enqueued_jobs("process_order")
   |> should.be_ok

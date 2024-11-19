@@ -1,11 +1,11 @@
-import decode
+import decode/zero
 import gleam/option.{type Option}
-import gleam/pgo
+import pog
 
 /// A row you get from running the `release_claim` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_claim.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ReleaseClaimRow {
@@ -14,9 +14,9 @@ pub type ReleaseClaimRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    reserved_at: Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
     reserved_by: Option(String),
   )
 }
@@ -24,41 +24,33 @@ pub type ReleaseClaimRow {
 /// Runs the `release_claim` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_claim.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn release_claim(db, arg_1) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use reserved_at <- decode.parameter
-      use reserved_by <- decode.parameter
-      ReleaseClaimRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        reserved_at: reserved_at,
-        reserved_by: reserved_by,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, decode.optional(timestamp_decoder()))
-    |> decode.field(7, decode.optional(decode.string))
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(ReleaseClaimRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
 
-  "UPDATE
+  let query =
+    "UPDATE
     jobs
 SET
     reserved_at = NULL,
@@ -68,13 +60,17 @@ WHERE
 RETURNING
     *;
 "
-  |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `insert_succeeded_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_succeeded_job.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type InsertSucceededJobRow {
@@ -83,47 +79,40 @@ pub type InsertSucceededJobRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    succeeded_at: #(#(Int, Int, Int), #(Int, Int, Int)),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    succeeded_at: pog.Timestamp,
   )
 }
 
 /// Runs the `insert_succeeded_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_succeeded_job.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use succeeded_at <- decode.parameter
-      InsertSucceededJobRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        succeeded_at: succeeded_at,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, timestamp_decoder())
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use succeeded_at <- zero.field(6, timestamp_decoder())
+    zero.success(InsertSucceededJobRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      succeeded_at:,
+    ))
+  }
 
-  "INSERT INTO
+  let query =
+    "INSERT INTO
     jobs_succeeded (
         id,
         name,
@@ -138,25 +127,23 @@ VALUES
 RETURNING
     *;
 "
-  |> pgo.execute(
-    db,
-    [
-      pgo.text(arg_1),
-      pgo.text(arg_2),
-      pgo.text(arg_3),
-      pgo.int(arg_4),
-      pgo.timestamp(arg_5),
-      pgo.timestamp(arg_6),
-      pgo.timestamp(arg_7),
-    ],
-    decode.from(decoder, _),
-  )
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.text(arg_3))
+  |> pog.parameter(pog.int(arg_4))
+  |> pog.parameter(pog.timestamp(arg_5))
+  |> pog.parameter(pog.timestamp(arg_6))
+  |> pog.parameter(pog.timestamp(arg_7))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `get_failed_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_failed_jobs.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type GetFailedJobsRow {
@@ -166,80 +153,81 @@ pub type GetFailedJobsRow {
     payload: String,
     attempts: Int,
     exception: String,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    failed_at: #(#(Int, Int, Int), #(Int, Int, Int)),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    failed_at: pog.Timestamp,
   )
 }
 
 /// Runs the `get_failed_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_failed_jobs.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn get_failed_jobs(db, arg_1) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use exception <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use failed_at <- decode.parameter
-      GetFailedJobsRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        exception: exception,
-        created_at: created_at,
-        available_at: available_at,
-        failed_at: failed_at,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, decode.string)
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, timestamp_decoder())
-    |> decode.field(7, timestamp_decoder())
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use exception <- zero.field(4, zero.string)
+    use created_at <- zero.field(5, timestamp_decoder())
+    use available_at <- zero.field(6, timestamp_decoder())
+    use failed_at <- zero.field(7, timestamp_decoder())
+    zero.success(GetFailedJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      exception:,
+      created_at:,
+      available_at:,
+      failed_at:,
+    ))
+  }
 
-  "SELECT
+  let query =
+    "SELECT
     *
 FROM
     jobs_failed
 LIMIT
     $1;
 "
-  |> pgo.execute(db, [pgo.int(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// Runs the `delete_enqueued_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/delete_enqueued_job.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn delete_enqueued_job(db, arg_1) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+  let decoder = zero.map(zero.dynamic, fn(_) { Nil })
 
-  "DELETE FROM
+  let query =
+    "DELETE FROM
     jobs
 WHERE
     id = $1;
 "
-  |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `get_succeeded_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type GetSucceededJobsRow {
@@ -248,60 +236,57 @@ pub type GetSucceededJobsRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    succeeded_at: #(#(Int, Int, Int), #(Int, Int, Int)),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    succeeded_at: pog.Timestamp,
   )
 }
 
 /// Runs the `get_succeeded_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn get_succeeded_jobs(db, arg_1) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use succeeded_at <- decode.parameter
-      GetSucceededJobsRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        succeeded_at: succeeded_at,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, timestamp_decoder())
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use succeeded_at <- zero.field(6, timestamp_decoder())
+    zero.success(GetSucceededJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      succeeded_at:,
+    ))
+  }
 
-  "SELECT
+  let query =
+    "SELECT
     *
 FROM
     jobs_succeeded
 LIMIT
     $1;
 "
-  |> pgo.execute(db, [pgo.int(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `increment_attempts` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/increment_attempts.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type IncrementAttemptsRow {
@@ -310,9 +295,9 @@ pub type IncrementAttemptsRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    reserved_at: Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
     reserved_by: Option(String),
   )
 }
@@ -320,41 +305,33 @@ pub type IncrementAttemptsRow {
 /// Runs the `increment_attempts` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/increment_attempts.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn increment_attempts(db, arg_1) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use reserved_at <- decode.parameter
-      use reserved_by <- decode.parameter
-      IncrementAttemptsRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        reserved_at: reserved_at,
-        reserved_by: reserved_by,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, decode.optional(timestamp_decoder()))
-    |> decode.field(7, decode.optional(decode.string))
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(IncrementAttemptsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
 
-  "UPDATE
+  let query =
+    "UPDATE
     jobs
 SET
     attempts = attempts + 1
@@ -363,13 +340,17 @@ WHERE
 RETURNING
     *;
 "
-  |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `insert_failed_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_failed_job.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type InsertFailedJobRow {
@@ -379,16 +360,16 @@ pub type InsertFailedJobRow {
     payload: String,
     attempts: Int,
     exception: String,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    failed_at: #(#(Int, Int, Int), #(Int, Int, Int)),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    failed_at: pog.Timestamp,
   )
 }
 
 /// Runs the `insert_failed_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_failed_job.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn insert_failed_job(
@@ -402,37 +383,29 @@ pub fn insert_failed_job(
   arg_7,
   arg_8,
 ) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use exception <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use failed_at <- decode.parameter
-      InsertFailedJobRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        exception: exception,
-        created_at: created_at,
-        available_at: available_at,
-        failed_at: failed_at,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, decode.string)
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, timestamp_decoder())
-    |> decode.field(7, timestamp_decoder())
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use exception <- zero.field(4, zero.string)
+    use created_at <- zero.field(5, timestamp_decoder())
+    use available_at <- zero.field(6, timestamp_decoder())
+    use failed_at <- zero.field(7, timestamp_decoder())
+    zero.success(InsertFailedJobRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      exception:,
+      created_at:,
+      available_at:,
+      failed_at:,
+    ))
+  }
 
-  "INSERT INTO
+  let query =
+    "INSERT INTO
     jobs_failed (
         id,
         name,
@@ -448,26 +421,24 @@ VALUES
 RETURNING
     *;
 "
-  |> pgo.execute(
-    db,
-    [
-      pgo.text(arg_1),
-      pgo.text(arg_2),
-      pgo.text(arg_3),
-      pgo.int(arg_4),
-      pgo.text(arg_5),
-      pgo.timestamp(arg_6),
-      pgo.timestamp(arg_7),
-      pgo.timestamp(arg_8),
-    ],
-    decode.from(decoder, _),
-  )
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.text(arg_3))
+  |> pog.parameter(pog.int(arg_4))
+  |> pog.parameter(pog.text(arg_5))
+  |> pog.parameter(pog.timestamp(arg_6))
+  |> pog.parameter(pog.timestamp(arg_7))
+  |> pog.parameter(pog.timestamp(arg_8))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `enqueue_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/enqueue_job.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type EnqueueJobRow {
@@ -476,9 +447,9 @@ pub type EnqueueJobRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    reserved_at: Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
     reserved_by: Option(String),
   )
 }
@@ -486,41 +457,33 @@ pub type EnqueueJobRow {
 /// Runs the `enqueue_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/enqueue_job.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn enqueue_job(db, arg_1, arg_2, arg_3, arg_4, arg_5) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use reserved_at <- decode.parameter
-      use reserved_by <- decode.parameter
-      EnqueueJobRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        reserved_at: reserved_at,
-        reserved_by: reserved_by,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, decode.optional(timestamp_decoder()))
-    |> decode.field(7, decode.optional(decode.string))
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(EnqueueJobRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
 
-  "INSERT INTO
+  let query =
+    "INSERT INTO
     jobs (
         id,
         name,
@@ -534,23 +497,21 @@ VALUES
 RETURNING
     *;
 "
-  |> pgo.execute(
-    db,
-    [
-      pgo.text(arg_1),
-      pgo.text(arg_2),
-      pgo.text(arg_3),
-      pgo.timestamp(arg_4),
-      pgo.timestamp(arg_5),
-    ],
-    decode.from(decoder, _),
-  )
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.text(arg_3))
+  |> pog.parameter(pog.timestamp(arg_4))
+  |> pog.parameter(pog.timestamp(arg_5))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `get_enqueued_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type GetEnqueuedJobsRow {
@@ -559,9 +520,9 @@ pub type GetEnqueuedJobsRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    reserved_at: Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
     reserved_by: Option(String),
   )
 }
@@ -569,41 +530,33 @@ pub type GetEnqueuedJobsRow {
 /// Runs the `get_enqueued_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn get_enqueued_jobs(db, arg_1) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use reserved_at <- decode.parameter
-      use reserved_by <- decode.parameter
-      GetEnqueuedJobsRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        reserved_at: reserved_at,
-        reserved_by: reserved_by,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, decode.optional(timestamp_decoder()))
-    |> decode.field(7, decode.optional(decode.string))
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(GetEnqueuedJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
 
-  "SELECT
+  let query =
+    "SELECT
     *
 FROM
     jobs
@@ -611,13 +564,17 @@ WHERE
     name = $1
     AND reserved_at IS NULL
 "
-  |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
 /// A row you get from running the `get_running_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_running_jobs.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v1.7.1 of the
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type GetRunningJobsRow {
@@ -626,9 +583,9 @@ pub type GetRunningJobsRow {
     name: String,
     payload: String,
     attempts: Int,
-    created_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-    reserved_at: Option(#(#(Int, Int, Int), #(Int, Int, Int))),
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
     reserved_by: Option(String),
   )
 }
@@ -636,41 +593,33 @@ pub type GetRunningJobsRow {
 /// Runs the `get_running_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_running_jobs.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v1.7.1 of
+/// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn get_running_jobs(db, arg_1) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at <- decode.parameter
-      use available_at <- decode.parameter
-      use reserved_at <- decode.parameter
-      use reserved_by <- decode.parameter
-      GetRunningJobsRow(
-        id: id,
-        name: name,
-        payload: payload,
-        attempts: attempts,
-        created_at: created_at,
-        available_at: available_at,
-        reserved_at: reserved_at,
-        reserved_by: reserved_by,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, timestamp_decoder())
-    |> decode.field(5, timestamp_decoder())
-    |> decode.field(6, decode.optional(timestamp_decoder()))
-    |> decode.field(7, decode.optional(decode.string))
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(GetRunningJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
 
-  "SELECT
+  let query =
+    "SELECT
     *
 FROM
     jobs
@@ -678,17 +627,25 @@ WHERE
     reserved_at < CURRENT_TIMESTAMP
     AND reserved_by = $1
 "
-  |> pgo.execute(db, [pgo.text(arg_1)], decode.from(decoder, _))
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
 }
 
-// --- UTILS -------------------------------------------------------------------
+// --- Encoding/decoding utils -------------------------------------------------
 
 /// A decoder to decode `timestamp`s coming from a Postgres query.
 ///
 fn timestamp_decoder() {
-  use dynamic <- decode.then(decode.dynamic)
-  case pgo.decode_timestamp(dynamic) {
-    Ok(timestamp) -> decode.into(timestamp)
-    Error(_) -> decode.fail("timestamp")
+  use dynamic <- zero.then(zero.dynamic)
+  case pog.decode_timestamp(dynamic) {
+    Ok(timestamp) -> zero.success(timestamp)
+    Error(_) -> {
+      let date = pog.Date(0, 0, 0)
+      let time = pog.Time(0, 0, 0, 0)
+      zero.failure(pog.Timestamp(date:, time:), "timestamp")
+    }
   }
 }
