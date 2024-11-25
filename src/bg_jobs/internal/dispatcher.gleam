@@ -1,7 +1,7 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
+import bg_jobs/events
 import bg_jobs/internal/dispatcher_messages as messages
-import bg_jobs/internal/events
 import bg_jobs/internal/registries
 import bg_jobs/jobs
 import birl

@@ -1,6 +1,6 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
-import bg_jobs/internal/events
+import bg_jobs/events
 import bg_jobs/internal/postgres_db_adapter/sql
 import bg_jobs/jobs
 import birl
@@ -26,7 +26,10 @@ pub fn new(conn: pog.Connection, event_listners: List(events.EventListener)) {
     move_job_to_failed: move_job_to_failed(conn, send_event),
     increment_attempts: increment_attempts(conn, send_event),
     get_enqueued_jobs: get_enqueued_jobs(conn, send_event),
-    get_running_jobs: get_running_jobs(conn, send_event),
+    get_running_jobs_by_queue_name: get_running_jobs_by_queue_name(
+      conn,
+      send_event,
+    ),
     get_succeeded_jobs: get_succeeded_jobs(conn, send_event),
     get_failed_jobs: get_failed_jobs(conn, send_event),
     migrate_up: migrate_up(conn),
@@ -48,6 +51,9 @@ fn timestamp_to_erlang(timestamp: pog.Timestamp) {
   #(#(year, month, day), #(hour, minute, seconds))
 }
 
+/// If a job succeeds within the retries, this function 
+/// will be called and move the job to the succeeded jobs table
+/// 
 fn move_job_to_succeeded(conn: pog.Connection, send_event: events.EventListener) {
   fn(job: jobs.Job) {
     pog.transaction(conn, fn(conn) {
@@ -84,6 +90,9 @@ fn move_job_to_succeeded(conn: pog.Connection, send_event: events.EventListener)
   }
 }
 
+/// If a job fails and cannot complete within the retries this function 
+/// will be called and move the job to the faild jobs table
+/// 
 fn move_job_to_failed(conn: pog.Connection, send_event: events.EventListener) {
   fn(job: jobs.Job, exception: String) {
     pog.transaction(conn, fn(conn) {
@@ -122,6 +131,8 @@ fn move_job_to_failed(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Get all succeeded jobs
+///
 fn get_succeeded_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
     send_event(events.DbEvent("get_succeeded_jobs", [int.to_string(limit)]))
@@ -155,6 +166,8 @@ fn get_succeeded_jobs(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Get all failed jobs.
+/// 
 fn get_failed_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
     send_event(events.DbEvent("get_failed_jobs", [int.to_string(limit)]))
@@ -189,6 +202,8 @@ fn get_failed_jobs(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Sets claimed_at and claimed_by and return the job to be processed.
+/// 
 fn claim_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
@@ -203,6 +218,8 @@ fn claim_jobs(conn: pog.Connection, send_event: events.EventListener) {
       |> list.map(fn(i) { "$" <> int.to_string(i + 4) })
       |> string.join(with: ",")
 
+    // This is inlined because it needs to be dynamic
+    // over the different job_names we're interested in
     let sql = "
         UPDATE jobs
            SET reserved_at = $1, reserved_by = $2
@@ -247,6 +264,8 @@ fn claim_jobs(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Release claim from job to allow another queue to process it
+///
 fn release_claim(conn: pog.Connection, send_event: events.EventListener) {
   fn(job_id: String) {
     send_event(events.DbEvent("claim_jobs", [job_id]))
@@ -279,7 +298,12 @@ fn release_claim(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
-fn get_running_jobs(conn: pog.Connection, send_event: events.EventListener) {
+/// Get a specific queues running jobs
+///
+fn get_running_jobs_by_queue_name(
+  conn: pog.Connection,
+  send_event: events.EventListener,
+) {
   fn(queue_id: String) {
     send_event(events.DbEvent("get_running_jobs", [queue_id]))
     sql.get_running_jobs(conn, queue_id)
@@ -311,6 +335,8 @@ fn get_running_jobs(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Get jobs from the database that has not been picked up by any queue
+///
 fn get_enqueued_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(job_name: String) {
     send_event(events.DbEvent("get_enqueued_jobs", [job_name]))
@@ -343,6 +369,8 @@ fn get_enqueued_jobs(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// If a job processing attempt has failed this should be called to increment the attempts
+///
 fn increment_attempts(conn: pog.Connection, send_event: events.EventListener) {
   fn(job: jobs.Job) {
     send_event(events.DbEvent("increment_attempts", [job.id, job.name]))
@@ -374,6 +402,8 @@ fn increment_attempts(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Enqueues a job for queues to claim an process
+///
 fn enqueue_job(conn: pog.Connection, send_event: events.EventListener) {
   fn(
     job_name: String,
@@ -424,7 +454,7 @@ fn enqueue_job(conn: pog.Connection, send_event: events.EventListener) {
 
 @internal
 pub fn migrate_up(conn: pog.Connection) {
-  fn() {
+  fn(event_listeners: List(events.EventListener)) {
     use _ <- result.try(
       pog.query(
         "
@@ -483,13 +513,14 @@ pub fn migrate_up(conn: pog.Connection) {
       |> result.map_error(errors.DbError),
     )
 
+    events.send_event(event_listeners, events.MigrateUpComplete)
     Ok(Nil)
   }
 }
 
 @internal
 pub fn migrate_down(conn: pog.Connection) {
-  fn() {
+  fn(event_listeners: List(events.EventListener)) {
     use _ <- result.try(
       pog.query("DROP TABLE IF EXISTS jobs;")
       |> pog.execute(conn)
@@ -508,6 +539,8 @@ pub fn migrate_down(conn: pog.Connection) {
       |> result.map_error(string.inspect)
       |> result.map_error(errors.DbError),
     )
+
+    events.send_event(event_listeners, events.MigrateDownComplete)
     Ok(Nil)
   }
 }

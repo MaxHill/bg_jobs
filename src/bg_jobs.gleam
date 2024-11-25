@@ -1,8 +1,8 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
+import bg_jobs/events
 import bg_jobs/internal/dispatcher
 import bg_jobs/internal/dispatcher_messages
-import bg_jobs/internal/events
 import bg_jobs/internal/queue_messages
 import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages

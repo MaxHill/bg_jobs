@@ -37,8 +37,8 @@ pub fn new_db() {
     |> pog.password(option.Some(db_password))
     |> pog.pool_size(1)
     |> pog.connect()
-  let assert Ok(_) = postgres_db_adapter.migrate_down(db)()
-  let assert Ok(_) = postgres_db_adapter.migrate_up(db)()
+  let assert Ok(_) = postgres_db_adapter.migrate_down(db)([])
+  let assert Ok(_) = postgres_db_adapter.migrate_up(db)([])
   db
 }
 
@@ -339,8 +339,14 @@ pub fn increment_attempts_test() {
 
 pub fn migrate_test() {
   let conn = new_db()
+  let event_logger = test_helpers.new_logger()
+  let logger_event_listener = test_helpers.new_logger_event_listner(
+    event_logger,
+    _,
+  )
 
-  let assert Ok(_) = postgres_db_adapter.migrate_up(conn)()
+  let assert Ok(_) =
+    postgres_db_adapter.migrate_up(conn)([logger_event_listener])
 
   let sql =
     "
@@ -362,7 +368,8 @@ AND table_type = 'BASE TABLE';"
   }
   |> should.equal(#(3, ["jobs", "jobs_failed", "jobs_succeeded"]))
 
-  let assert Ok(_) = postgres_db_adapter.migrate_down(conn)()
+  let assert Ok(_) =
+    postgres_db_adapter.migrate_down(conn)([logger_event_listener])
   pog.query(sql)
   |> pog.returning(dynamic.decode1(
     fn(str) { str },
@@ -371,6 +378,9 @@ AND table_type = 'BASE TABLE';"
   |> pog.execute(conn)
   |> should.be_ok
   |> should.equal(pog.Returned(0, []))
+
+  test_helpers.get_log(event_logger)
+  |> should.equal(["Event:MigrateUpComplete", "Event:MigrateDownComplete"])
 }
 
 pub fn empty_list_of_jobs_test() {
@@ -569,7 +579,7 @@ pub fn get_running_jobs_test() {
     )
     |> pog.execute(conn)
 
-  job_store.get_running_jobs("test_queue")
+  job_store.get_running_jobs_by_queue_name("test_queue")
   |> should.be_ok
   |> should.equal([
     jobs.Job(

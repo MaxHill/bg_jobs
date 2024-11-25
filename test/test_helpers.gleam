@@ -1,5 +1,5 @@
 import bg_jobs/errors
-import bg_jobs/internal/events
+import bg_jobs/events
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
 import gleam/list
@@ -8,8 +8,8 @@ import gleam/string
 import sqlight
 
 pub fn reset_db(connection: sqlight.Connection) {
-  let assert Ok(_) = sqlite_db_adapter.migrate_down(connection)()
-  let assert Ok(_) = sqlite_db_adapter.migrate_up(connection)()
+  let assert Ok(_) = sqlite_db_adapter.migrate_down(connection)([])
+  let assert Ok(_) = sqlite_db_adapter.migrate_up(connection)([])
 }
 
 // Test Logger
@@ -78,6 +78,8 @@ pub fn new_logger_event_listner(
     events.SetupErrorEvent(error) -> "SetupErrorEvent" <> string.inspect(error)
     events.DbEvent(event, input) ->
       "DbEvent|" <> event <> "|input:" <> string.join(input, with: ",")
+    events.MigrateDownComplete -> "MigrateDownComplete"
+    events.MigrateUpComplete -> "MigrateUpComplete"
   }
   |> fn(str) { "Event:" <> str }
   |> log_message(logger)

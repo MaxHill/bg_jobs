@@ -1,8 +1,8 @@
 import bg_jobs/errors
-import bg_jobs/internal/events
+import bg_jobs/events
 import birl
 import gleam/string
-import logging.{Info}
+import logging.{Debug, Error, Info}
 
 /// Listen to events and logg them using the [logging](https://hexdocs.pm/logging/) library
 ///
@@ -58,7 +58,7 @@ pub fn listner(event: events.Event) {
       logging.log(Info, now <> "|QueuePollingStoped|queue_name:" <> queue_name)
     events.DbQueryEvent(sql, attributes) ->
       logging.log(
-        logging.Debug,
+        Debug,
         now
           <> "|DbQueryEvent|sql:"
           <> sql
@@ -66,29 +66,28 @@ pub fn listner(event: events.Event) {
           <> string.inspect(attributes),
       )
     events.DbResponseEvent(response) ->
-      logging.log(
-        logging.Debug,
-        now <> "|DbResponseEvent|response:" <> response,
-      )
+      logging.log(Debug, now <> "|DbResponseEvent|response:" <> response)
     events.DbErrorEvent(error) ->
       logging.log(
-        logging.Error,
+        Error,
         now <> "|DbErrorEvent|response:" <> error_to_string(error),
       )
     events.SetupErrorEvent(error) ->
       logging.log(
-        logging.Error,
+        Error,
         now <> "|SetupErrorEvent|error: " <> string.inspect(error),
       )
     events.DbEvent(event, input) ->
       logging.log(
-        logging.Error,
+        Error,
         now
           <> "|DbEvent|"
           <> event
           <> "|input:"
           <> string.join(input, with: ","),
       )
+    events.MigrateDownComplete -> logging.log(Info, "MigrateDownComplete")
+    events.MigrateUpComplete -> logging.log(Info, "MigrateUpComplete")
   }
   Nil
 }

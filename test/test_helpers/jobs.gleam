@@ -38,8 +38,8 @@ pub fn setup(
   )
   let db_adapter = sqlite_db_adapter.new(conn, [])
 
-  let assert Ok(_) = db_adapter.migrate_down()
-  let assert Ok(_) = db_adapter.migrate_up()
+  let assert Ok(_) = db_adapter.migrate_down([])
+  let assert Ok(_) = db_adapter.migrate_up([])
 
   let assert Ok(bg) =
     bg_jobs.new(db_adapter)
@@ -79,8 +79,8 @@ pub fn setup_interval(
   )
   let db_adapter = sqlite_db_adapter.new(conn, [])
 
-  let assert Ok(_) = db_adapter.migrate_down()
-  let assert Ok(_) = db_adapter.migrate_up()
+  let assert Ok(_) = db_adapter.migrate_down([])
+  let assert Ok(_) = db_adapter.migrate_up([])
 
   let assert Ok(bg) =
     bg_jobs.new(db_adapter)
@@ -127,8 +127,8 @@ pub fn setup_schedule(
   )
   let db_adapter = sqlite_db_adapter.new(conn, [])
 
-  let assert Ok(_) = db_adapter.migrate_down()
-  let assert Ok(_) = db_adapter.migrate_up()
+  let assert Ok(_) = db_adapter.migrate_down([])
+  let assert Ok(_) = db_adapter.migrate_up([])
 
   let assert Ok(bg) =
     bg_jobs.new(db_adapter)

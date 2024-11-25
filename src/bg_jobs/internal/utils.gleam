@@ -45,7 +45,7 @@ pub fn remove_in_flight_jobs(
   queue_name: String,
   db_adapter: db_adapter.DbAdapter,
 ) {
-  db_adapter.get_running_jobs(queue_name)
+  db_adapter.get_running_jobs_by_queue_name(queue_name)
   |> result.map(fn(jobs) {
     jobs
     |> list.map(fn(job) { job.id })

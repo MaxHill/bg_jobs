@@ -1,4 +1,5 @@
 import bg_jobs/errors
+import bg_jobs/events
 import bg_jobs/jobs
 
 // Database
@@ -19,11 +20,13 @@ pub type DbAdapter {
     move_job_to_failed: fn(jobs.Job, String) -> Result(Nil, errors.BgJobError),
     increment_attempts: fn(jobs.Job) -> Result(jobs.Job, errors.BgJobError),
     get_enqueued_jobs: fn(String) -> Result(List(jobs.Job), errors.BgJobError),
-    get_running_jobs: fn(String) -> Result(List(jobs.Job), errors.BgJobError),
+    get_running_jobs_by_queue_name: fn(String) ->
+      Result(List(jobs.Job), errors.BgJobError),
     get_succeeded_jobs: fn(Int) ->
       Result(List(jobs.SucceededJob), errors.BgJobError),
     get_failed_jobs: fn(Int) -> Result(List(jobs.FailedJob), errors.BgJobError),
-    migrate_up: fn() -> Result(Nil, errors.BgJobError),
-    migrate_down: fn() -> Result(Nil, errors.BgJobError),
+    migrate_up: fn(List(events.EventListener)) -> Result(Nil, errors.BgJobError),
+    migrate_down: fn(List(events.EventListener)) ->
+      Result(Nil, errors.BgJobError),
   )
 }

@@ -1,6 +1,6 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
-import bg_jobs/internal/events
+import bg_jobs/events
 import bg_jobs/internal/utils
 import bg_jobs/jobs
 import birl
@@ -14,6 +14,8 @@ import gleam/string
 import sqlight
 import youid/uuid
 
+/// Create a new sqlite_db_adapter
+/// 
 pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener)) {
   let send_event = events.send_event(event_listners, _)
   db_adapter.DbAdapter(
@@ -24,7 +26,10 @@ pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener))
     move_job_to_failed: move_job_to_failed(conn, send_event),
     increment_attempts: increment_attempts(conn, send_event),
     get_enqueued_jobs: get_enqueued_jobs(conn, send_event),
-    get_running_jobs: get_running_jobs(conn, send_event),
+    get_running_jobs_by_queue_name: get_running_jobs_by_queue_name(
+      conn,
+      send_event,
+    ),
     get_succeeded_jobs: get_succeeded_jobs(conn, send_event),
     get_failed_jobs: get_failed_jobs(conn, send_event),
     migrate_up: migrate_up(conn),
@@ -56,6 +61,9 @@ fn query(
   res
 }
 
+/// If a job succeeds within the retries, this function 
+/// will be called and move the job to the succeeded jobs table
+/// 
 fn move_job_to_succeeded(
   conn: sqlight.Connection,
   send_event: events.EventListener,
@@ -105,6 +113,8 @@ fn move_job_to_succeeded(
   }
 }
 
+/// Get all completed and succeeded jobs
+///
 fn get_succeeded_jobs(
   conn: sqlight.Connection,
   send_event: events.EventListener,
@@ -127,6 +137,8 @@ fn get_succeeded_jobs(
   }
 }
 
+/// Get all failed jobs.
+/// 
 fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
     send_event(events.DbEvent("get_failed_jobs", [int.to_string(limit)]))
@@ -146,6 +158,8 @@ fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Sets claimed_at and claimed_by and return the job to be processed.
+/// 
 fn move_job_to_failed(
   conn: sqlight.Connection,
   send_event: events.EventListener,
@@ -205,6 +219,8 @@ fn move_job_to_failed(
   }
 }
 
+/// Sets claimed_at and claimed_by and return the job to be processed.
+/// 
 fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
@@ -245,6 +261,8 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Release claim from job to allow another queue to process it
+///
 fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_id: String) {
     send_event(events.DbEvent("claim_jobs", [job_id]))
@@ -267,7 +285,12 @@ fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
   }
 }
 
-fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
+/// Get a specific queues running jobs
+///
+fn get_running_jobs_by_queue_name(
+  conn: sqlight.Connection,
+  send_event: events.EventListener,
+) {
   fn(queue_id: String) {
     send_event(events.DbEvent("get_running_jobs", [queue_id]))
     query(
@@ -282,6 +305,8 @@ fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) 
   }
 }
 
+/// Get jobs from the database that has not been picked up by any queue
+///
 fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_name: String) {
     send_event(events.DbEvent("get_enqueued_jobs", [job_name]))
@@ -297,6 +322,8 @@ fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener)
   }
 }
 
+/// If a job processing attempt has failed this should be called to increment the attempts
+///
 fn increment_attempts(
   conn: sqlight.Connection,
   send_event: events.EventListener,
@@ -325,6 +352,8 @@ fn increment_attempts(
   }
 }
 
+/// Enqueues a job for queues to claim an process
+///
 fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(
     job_name: String,
@@ -380,7 +409,7 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
 
 @internal
 pub fn migrate_up(conn: sqlight.Connection) {
-  fn() {
+  fn(event_listeners: List(events.EventListener)) {
     let sql =
       "
     CREATE TABLE IF NOT EXISTS jobs (
@@ -417,6 +446,9 @@ pub fn migrate_up(conn: sqlight.Connection) {
     "
 
     sqlight.exec(sql, conn)
+    |> result.map(fn(_) {
+      events.send_event(event_listeners, events.MigrateUpComplete)
+    })
     |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
   }
@@ -424,13 +456,16 @@ pub fn migrate_up(conn: sqlight.Connection) {
 
 @internal
 pub fn migrate_down(conn: sqlight.Connection) {
-  fn() {
+  fn(event_listeners: List(events.EventListener)) {
     let sql =
       "DROP TABLE IF EXISTS jobs;
     DROP TABLE IF EXISTS jobs_failed;
     DROP TABLE IF EXISTS jobs_succeeded;"
 
     sqlight.exec(sql, conn)
+    |> result.map(fn(_) {
+      events.send_event(event_listeners, events.MigrateDownComplete)
+    })
     |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
   }

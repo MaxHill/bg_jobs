@@ -19,8 +19,8 @@ const job_payload = "test-payload"
 pub fn enqueue_job_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(returned_job) =
     job_store.enqueue_job(
@@ -58,8 +58,8 @@ pub fn enqueue_job_test() {
 pub fn claim_jobs_limit_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_returned_job1) =
     job_store.enqueue_job(
@@ -105,8 +105,8 @@ pub fn claim_jobs_limit_test() {
 pub fn claim_jobs_returned_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -134,8 +134,8 @@ pub fn claim_jobs_returned_test() {
 pub fn move_job_to_success_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(job) =
     job_store.enqueue_job(
@@ -181,8 +181,8 @@ pub fn move_job_to_success_test() {
 pub fn move_job_to_failed_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(job) =
     job_store.enqueue_job(
@@ -229,8 +229,8 @@ pub fn move_job_to_failed_test() {
 pub fn get_succeeded_jobs_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     sqlight.exec(
@@ -274,8 +274,8 @@ pub fn get_succeeded_jobs_test() {
 pub fn get_failed_jobs_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     sqlight.exec(
@@ -322,8 +322,8 @@ pub fn get_failed_jobs_test() {
 pub fn increment_attempts_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(job) =
     job_store.enqueue_job(
@@ -340,8 +340,13 @@ pub fn increment_attempts_test() {
 
 pub fn migrate_test() {
   use conn <- sqlight.with_connection(":memory:")
+  let event_logger = test_helpers.new_logger()
+  let logger_event_listener = test_helpers.new_logger_event_listner(
+    event_logger,
+    _,
+  )
 
-  let assert Ok(_) = sqlite_db_adapter.migrate_up(conn)()
+  let assert Ok(_) = sqlite_db_adapter.migrate_up(conn)([logger_event_listener])
 
   let sql =
     "
@@ -358,7 +363,8 @@ pub fn migrate_test() {
   |> should.be_ok
   |> should.equal(["jobs", "jobs_failed", "jobs_succeeded"])
 
-  let assert Ok(_) = sqlite_db_adapter.migrate_down(conn)()
+  let assert Ok(_) =
+    sqlite_db_adapter.migrate_down(conn)([logger_event_listener])
   sqlight.query(
     sql,
     conn,
@@ -367,13 +373,16 @@ pub fn migrate_test() {
   )
   |> should.be_ok
   |> should.equal([])
+
+  test_helpers.get_log(event_logger)
+  |> should.equal(["Event:MigrateUpComplete", "Event:MigrateDownComplete"])
 }
 
 pub fn empty_list_of_jobs_test() {
   use conn <- sqlight.with_connection(":memory:")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   job_store.claim_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
@@ -382,8 +391,8 @@ pub fn empty_list_of_jobs_test() {
 pub fn multiple_list_of_jobs_test() {
   use conn <- sqlight.with_connection(":memory:")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -421,8 +430,8 @@ pub fn db_events_test() {
     sqlite_db_adapter.new(conn, [
       test_helpers.new_logger_event_listner(event_logger, _),
     ])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -476,8 +485,8 @@ pub fn release_claim_test() {
     sqlite_db_adapter.new(conn, [
       test_helpers.new_logger_event_listner(event_logger, _),
     ])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     sqlight.query(
@@ -512,8 +521,8 @@ pub fn scheduled_job_test() {
     sqlite_db_adapter.new(conn, [
       test_helpers.new_logger_event_listner(event_logger, _),
     ])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     job_store.enqueue_job(
@@ -542,8 +551,8 @@ pub fn scheduled_job_test() {
 pub fn get_running_jobs_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     sqlight.exec(
@@ -580,7 +589,7 @@ pub fn get_running_jobs_test() {
       conn,
     )
 
-  job_store.get_running_jobs("test_queue")
+  job_store.get_running_jobs_by_queue_name("test_queue")
   |> should.be_ok
   |> should.equal([
     jobs.Job(
@@ -599,8 +608,8 @@ pub fn get_running_jobs_test() {
 pub fn get_enqueued_jobs_test() {
   use conn <- sqlight.with_connection("dispatch")
   let job_store = sqlite_db_adapter.new(conn, [fn(_) { Nil }])
-  let assert Ok(_) = job_store.migrate_down()
-  let assert Ok(_) = job_store.migrate_up()
+  let assert Ok(_) = job_store.migrate_down([])
+  let assert Ok(_) = job_store.migrate_up([])
 
   let assert Ok(_) =
     sqlight.exec(

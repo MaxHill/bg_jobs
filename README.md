@@ -18,6 +18,29 @@ Bg_jobs provide the following:
 - *Queues* - including delayed execution
 - *Scheduled jobs* - on an interval or cron like schedule
 
+# Architecture
+*TODO:* expand this section
+
+Program architecture:
+- *otp supervisor*
+  - *otp worker* - queue (0 or more)
+    - Polls the database on specified interval looking for avaliable jobs of the type it can handle
+  - *otp worker* - scheduled jobs queue (0 or more)
+    - Polls the database on specified interval looking for avaliable jobs of the type it can handle
+    - Asks dispatcher to enqueu a new job with apropriate avalible at after processing is done 
+  - *otp worker* - dispatcher (1 per program)
+    - Enqueues jobs. Just writes them to the db
+  - *otp worker* - chip registry (1 per program)
+    - Holds Subjects to all workers in the application
+
+## Durability
+Jobs are claimed with a timestamp and queue/scheduled job name.
+Each queue and scheduled job should have a unique name even across machines.
+Whenever the worker starts up it clears out previously claimed jobs.
+This way if a worker crashes and the supervisor restarts it there is no 
+abandoned jobs.
+
+
 # Installation 
 
 ```sh

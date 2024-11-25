@@ -1,6 +1,6 @@
 import bg_jobs
 import bg_jobs/db_adapter
-import bg_jobs/internal/events
+import bg_jobs/events
 import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/queue
@@ -151,8 +151,8 @@ pub fn keep_going_after_panic_test() {
       ..sqlite_db_adapter.new(conn, []),
       claim_jobs: fn(_, _, _) { panic as "test panic" },
     )
-  let assert Ok(_) = bad_adapter.migrate_down()
-  let assert Ok(_) = bad_adapter.migrate_up()
+  let assert Ok(_) = bad_adapter.migrate_down([])
+  let assert Ok(_) = bad_adapter.migrate_up([])
   let logger = test_helpers.new_logger()
 
   let assert Ok(bg) =

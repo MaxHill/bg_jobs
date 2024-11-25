@@ -1,5 +1,5 @@
 import bg_jobs/db_adapter
-import bg_jobs/internal/events
+import bg_jobs/events
 import bg_jobs/internal/queue_messages as messages
 import bg_jobs/internal/registries
 import bg_jobs/internal/utils

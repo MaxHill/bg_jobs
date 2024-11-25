@@ -19,6 +19,9 @@ pub type Event {
   DbEvent(operation: String, input: List(String))
   DbResponseEvent(response: String)
   DbErrorEvent(error: errors.BgJobError)
+
+  MigrateUpComplete
+  MigrateDownComplete
 }
 
 pub type EventListener =
