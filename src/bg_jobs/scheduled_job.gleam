@@ -391,57 +391,57 @@ pub fn on_januaries(self: DateScheduleBuilder) {
 
 /// Shortcut function to set the schedule to trigger in February.
 pub fn on_februaries(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 2)
 }
 
 /// Shortcut function to set the schedule to trigger in March.
 pub fn on_marches(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 3)
 }
 
 /// Shortcut function to set the schedule to trigger in April.
 pub fn on_aprils(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 4)
 }
 
 /// Shortcut function to set the schedule to trigger in May.
 pub fn on_mays(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 5)
 }
 
 /// Shortcut function to set the schedule to trigger in June.
 pub fn on_junes(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 6)
 }
 
 /// Shortcut function to set the schedule to trigger in July.
 pub fn on_julies(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 7)
 }
 
 /// Shortcut function to set the schedule to trigger in August.
 pub fn on_augusts(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 8)
 }
 
 /// Shortcut function to set the schedule to trigger in September.
 pub fn on_septembers(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 9)
 }
 
 /// Shortcut function to set the schedule to trigger in October.
 pub fn on_octobers(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 10)
 }
 
 /// Shortcut function to set the schedule to trigger in November.
 pub fn on_novembers(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 11)
 }
 
 /// Shortcut function to set the schedule to trigger in December.
 pub fn on_decembers(self: DateScheduleBuilder) {
-  on_month(self, 1)
+  on_month(self, 12)
 }
 
 // DAY OF WEEK
@@ -535,48 +535,6 @@ pub fn on_weekdays(self: DateScheduleBuilder) {
 /// Shortcut function to set the schedule to trigger on weekends (Saturday and Sunday).
 pub fn on_weekends(self: DateScheduleBuilder) {
   self |> on_saturdays |> on_sundays
-}
-
-/// Convert the DateScheduleBuilder to actual cron syntax
-pub fn to_cron_syntax(self: DateScheduleBuilder) -> String {
-  let second_str = time_value_to_string(self.second)
-  let minute_str = time_value_to_string(self.minute)
-  let hour_str = time_value_to_string(self.hour)
-  let day_of_month_str = time_value_to_string(self.day_of_month)
-  let month_str = time_value_to_string(self.month)
-  let day_of_week_str = time_value_to_string(self.day_of_week)
-
-  // Combine into the final cron syntax
-  second_str
-  <> " "
-  <> minute_str
-  <> " "
-  <> hour_str
-  <> " "
-  <> day_of_month_str
-  <> " "
-  <> month_str
-  <> " "
-  <> day_of_week_str
-}
-
-/// Helper to convert TimeValue to cron syntax string
-fn time_value_to_string(time_value: TimeValue) -> String {
-  case time_value {
-    Every -> "*"
-    Specific(values) ->
-      values
-      |> list.map(time_selection_to_string)
-      |> string.join(",")
-  }
-}
-
-/// Convert TimeSelection to a string
-fn time_selection_to_string(selection: TimeSelection) -> String {
-  case selection {
-    Value(v) -> int.to_string(v)
-    Range(start, end) -> int.to_string(start) <> "-" <> int.to_string(end)
-  }
 }
 
 /// Validate and create Schedule from scheduleBuilder 

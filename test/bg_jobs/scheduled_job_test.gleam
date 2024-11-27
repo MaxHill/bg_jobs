@@ -150,140 +150,8 @@ pub fn to_birl_test() {
   )
 }
 
-pub fn new_schedule_test() {
-  let schedule = scheduled_job.new_schedule()
-  should.equal("0 * * * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-// Second
+// Next run date
 //---------------
-pub fn every_second_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.every_second
-  should.equal("* * * * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_second_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_second(30)
-  should.equal("0,30 * * * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn between_seconds_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.between_seconds(10, 20)
-  should.equal("0,10-20 * * * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-// Minute
-//---------------
-pub fn on_minute_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_minute(30)
-  should.equal("0 30 * * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn between_minutes_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.between_minutes(5, 10)
-  should.equal("0 5-10 * * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-// Hour
-//---------------
-pub fn on_hour_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_hour(9)
-  should.equal("0 * 9 * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn between_hours_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.between_hours(8, 12)
-  should.equal("0 * 8-12 * * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-// Day of month
-//---------------
-pub fn on_day_of_month_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.on_day_of_month(15)
-  should.equal("0 * * 15 * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn between_day_of_months_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.between_day_of_months(1, 15)
-  should.equal("0 * * 1-15 * *", scheduled_job.to_cron_syntax(schedule))
-}
-
-// Month
-//---------------
-pub fn on_month_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_month(5)
-  should.equal("0 * * * 5 *", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn between_months_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.between_months(3, 8)
-  should.equal("0 * * * 3-8 *", scheduled_job.to_cron_syntax(schedule))
-}
-
-// Day of week
-//---------------
-pub fn on_day_of_week_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_day_of_week(3)
-  should.equal("0 * * * * 3", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn between_day_of_weeks_test() {
-  let schedule =
-    scheduled_job.new_schedule() |> scheduled_job.between_day_of_weeks(1, 5)
-  should.equal("0 * * * * 1-5", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_mondays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_mondays
-  should.equal("0 * * * * 1", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_tuesdays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_thuesdays
-  should.equal("0 * * * * 2", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_wednesdays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_wednesdays
-  should.equal("0 * * * * 3", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_thursdays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_thursdays
-  should.equal("0 * * * * 4", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_fridays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_fridays
-  should.equal("0 * * * * 5", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_saturdays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_saturdays
-  should.equal("0 * * * * 6", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_sundays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_sundays
-  should.equal("0 * * * * 7", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_weekdays_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_weekdays
-  should.equal("0 * * * * 1,2,3,4,5", scheduled_job.to_cron_syntax(schedule))
-}
-
-pub fn on_weekends_test() {
-  let schedule = scheduled_job.new_schedule() |> scheduled_job.on_weekends
-  should.equal("0 * * * * 6,7", scheduled_job.to_cron_syntax(schedule))
-}
-
 pub fn next_must_be_in_future_test() {
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule() |> scheduled_job.build_schedule()
@@ -740,4 +608,123 @@ pub fn error_build_schedule_day_of_week_test() {
   |> should.equal(scheduled_job.OutOfBoundsError(
     "Day of week must be between 1 and 7, found: 8",
   ))
+}
+
+pub fn on_named_day_test() {
+  scheduled_job.new_schedule()
+  |> scheduled_job.every_second()
+  |> scheduled_job.on_mondays()
+  |> scheduled_job.on_thuesdays()
+  |> scheduled_job.on_wednesdays()
+  |> scheduled_job.on_thursdays()
+  |> scheduled_job.on_fridays()
+  |> scheduled_job.on_saturdays()
+  |> scheduled_job.on_sundays()
+  |> scheduled_job.build_schedule()
+  |> should.be_ok()
+  |> should.equal(
+    scheduled_job.Schedule(scheduled_job.DateSchedule(
+      second: scheduled_job.Every,
+      minute: scheduled_job.Every,
+      hour: scheduled_job.Every,
+      day_of_month: scheduled_job.Every,
+      month: scheduled_job.Every,
+      day_of_week: scheduled_job.Specific([
+        scheduled_job.Value(1),
+        scheduled_job.Value(2),
+        scheduled_job.Value(3),
+        scheduled_job.Value(4),
+        scheduled_job.Value(5),
+        scheduled_job.Value(6),
+        scheduled_job.Value(7),
+      ]),
+    )),
+  )
+}
+
+pub fn on_weekdays_test() {
+  scheduled_job.new_schedule()
+  |> scheduled_job.every_second()
+  |> scheduled_job.on_weekdays()
+  |> scheduled_job.build_schedule()
+  |> should.be_ok()
+  |> should.equal(
+    scheduled_job.Schedule(scheduled_job.DateSchedule(
+      second: scheduled_job.Every,
+      minute: scheduled_job.Every,
+      hour: scheduled_job.Every,
+      day_of_month: scheduled_job.Every,
+      month: scheduled_job.Every,
+      day_of_week: scheduled_job.Specific([
+        scheduled_job.Value(1),
+        scheduled_job.Value(2),
+        scheduled_job.Value(3),
+        scheduled_job.Value(4),
+        scheduled_job.Value(5),
+      ]),
+    )),
+  )
+}
+
+pub fn on_weekends_test() {
+  scheduled_job.new_schedule()
+  |> scheduled_job.every_second()
+  |> scheduled_job.on_weekends()
+  |> scheduled_job.build_schedule()
+  |> should.be_ok()
+  |> should.equal(
+    scheduled_job.Schedule(scheduled_job.DateSchedule(
+      second: scheduled_job.Every,
+      minute: scheduled_job.Every,
+      hour: scheduled_job.Every,
+      day_of_month: scheduled_job.Every,
+      month: scheduled_job.Every,
+      day_of_week: scheduled_job.Specific([
+        scheduled_job.Value(6),
+        scheduled_job.Value(7),
+      ]),
+    )),
+  )
+}
+
+pub fn on_months_test() {
+  scheduled_job.new_schedule()
+  |> scheduled_job.every_second()
+  |> scheduled_job.on_januaries()
+  |> scheduled_job.on_februaries()
+  |> scheduled_job.on_marches()
+  |> scheduled_job.on_aprils()
+  |> scheduled_job.on_mays()
+  |> scheduled_job.on_junes()
+  |> scheduled_job.on_julies()
+  |> scheduled_job.on_augusts()
+  |> scheduled_job.on_septembers()
+  |> scheduled_job.on_octobers()
+  |> scheduled_job.on_novembers()
+  |> scheduled_job.on_decembers()
+  |> scheduled_job.build_schedule()
+  |> should.be_ok()
+  |> should.equal(
+    scheduled_job.Schedule(scheduled_job.DateSchedule(
+      second: scheduled_job.Every,
+      minute: scheduled_job.Every,
+      hour: scheduled_job.Every,
+      day_of_month: scheduled_job.Every,
+      month: scheduled_job.Specific([
+        scheduled_job.Value(1),
+        scheduled_job.Value(2),
+        scheduled_job.Value(3),
+        scheduled_job.Value(4),
+        scheduled_job.Value(5),
+        scheduled_job.Value(6),
+        scheduled_job.Value(7),
+        scheduled_job.Value(8),
+        scheduled_job.Value(9),
+        scheduled_job.Value(10),
+        scheduled_job.Value(11),
+        scheduled_job.Value(12),
+      ]),
+      day_of_week: scheduled_job.Every,
+    )),
+  )
 }
