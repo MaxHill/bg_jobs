@@ -31,7 +31,7 @@ Program architecture:
   - *otp worker* - dispatcher (1 per program)
     - Enqueues jobs. Just writes them to the db
   - *otp worker* - chip registry (1 per program)
-    - Holds Subjects to all workers in the application
+    - Holds Subjects to all workers in bg_jobs. This is used for named lookup
 
 ## Durability
 Jobs are claimed with a timestamp and queue/scheduled job name.
