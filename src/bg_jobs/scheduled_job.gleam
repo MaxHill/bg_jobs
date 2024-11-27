@@ -1,7 +1,6 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
-import bg_jobs/internal/bg_jobs_ffi
 import bg_jobs/internal/dispatcher
 import bg_jobs/internal/dispatcher_messages
 import bg_jobs/internal/registries
@@ -15,8 +14,16 @@ import gleam/erlang/process
 import gleam/function
 import gleam/int
 import gleam/list
+import gleam/order
 import gleam/otp/actor
+import gleam/result
 import gleam/string
+import tempo
+import tempo/date
+import tempo/duration
+import tempo/month
+import tempo/naive_datetime
+import tempo/time
 
 pub type Spec {
   Spec(
@@ -31,7 +38,7 @@ pub type Spec {
 
 pub type Schedule {
   Interval(Duration)
-  Schedule(ScheduleBuilder)
+  Schedule(DateSchedule)
 }
 
 // Interval
@@ -103,8 +110,19 @@ pub fn new_interval_years(years: Int) {
 
 // Schdedule
 //---------------
-pub type ScheduleBuilder {
-  ScheduleBuilder(
+pub type DateScheduleBuilder {
+  DateScheduleBuilder(
+    second: TimeValue,
+    minute: TimeValue,
+    hour: TimeValue,
+    day_of_month: TimeValue,
+    month: TimeValue,
+    day_of_week: TimeValue,
+  )
+}
+
+pub type DateSchedule {
+  DateSchedule(
     second: TimeValue,
     minute: TimeValue,
     hour: TimeValue,
@@ -124,10 +142,16 @@ pub type TimeSelection {
   Range(Int, Int)
 }
 
+pub type DateError {
+  DateError(tempo.DateOutOfBoundsError)
+  TimeError(tempo.TimeOutOfBoundsError)
+  OutOfBoundsError(String)
+}
+
 /// Create a new schedule that runs on the first second
 /// every minut
-pub fn new_schedule() -> ScheduleBuilder {
-  ScheduleBuilder(
+pub fn new_schedule() -> DateScheduleBuilder {
+  DateScheduleBuilder(
     second: Specific([Value(0)]),
     minute: Every,
     hour: Every,
@@ -140,8 +164,8 @@ pub fn new_schedule() -> ScheduleBuilder {
 // Second 
 //---------------
 /// Sets the schedule to trigger every second.
-pub fn every_second(self: ScheduleBuilder) -> ScheduleBuilder {
-  ScheduleBuilder(
+pub fn every_second(self: DateScheduleBuilder) -> DateScheduleBuilder {
+  DateScheduleBuilder(
     Every,
     self.minute,
     self.hour,
@@ -157,13 +181,13 @@ pub fn every_second(self: ScheduleBuilder) -> ScheduleBuilder {
 /// Note: the default value is to trigger on second 0 so you would 
 /// need to set it to every second first and then to a specific to 
 /// only get that 
-pub fn on_second(self: ScheduleBuilder, second: Int) -> ScheduleBuilder {
+pub fn on_second(self: DateScheduleBuilder, second: Int) -> DateScheduleBuilder {
   let second = case self.second {
     Every -> Specific([Value(second)])
     Specific(values) -> Specific(list.flatten([values, [Value(second)]]))
   }
 
-  ScheduleBuilder(
+  DateScheduleBuilder(
     second,
     self.minute,
     self.hour,
@@ -175,15 +199,15 @@ pub fn on_second(self: ScheduleBuilder, second: Int) -> ScheduleBuilder {
 
 /// Sets a range of seconds during which the schedule should trigger.
 pub fn between_seconds(
-  self: ScheduleBuilder,
+  self: DateScheduleBuilder,
   start: Int,
   end: Int,
-) -> ScheduleBuilder {
+) -> DateScheduleBuilder {
   let second = case self.second {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     second,
     self.minute,
     self.hour,
@@ -197,7 +221,7 @@ pub fn between_seconds(
 //---------------
 /// Adds a specific minute at which the schedule should trigger.
 /// If other specific minutes are already set, appends the given minute.
-pub fn on_minute(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+pub fn on_minute(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
   let minute = case self.minute {
     Every -> {
       Specific([Value(value)])
@@ -206,7 +230,7 @@ pub fn on_minute(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
       Specific(list.flatten([values, [Value(value)]]))
     }
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     minute,
     self.hour,
@@ -218,15 +242,15 @@ pub fn on_minute(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
 
 /// Sets a range of minutes during which the schedule should trigger.
 pub fn between_minutes(
-  self: ScheduleBuilder,
+  self: DateScheduleBuilder,
   start: Int,
   end: Int,
-) -> ScheduleBuilder {
+) -> DateScheduleBuilder {
   let minute = case self.minute {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     minute,
     self.hour,
@@ -240,12 +264,12 @@ pub fn between_minutes(
 //---------------
 /// Adds a specific hour at which the schedule should trigger.
 /// If other specific hours are already set, appends the given hour.
-pub fn on_hour(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+pub fn on_hour(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
   let hour = case self.hour {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     hour,
@@ -257,15 +281,15 @@ pub fn on_hour(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
 
 /// Sets a range of hours during which the schedule should trigger.
 pub fn between_hours(
-  self: ScheduleBuilder,
+  self: DateScheduleBuilder,
   start: Int,
   end: Int,
-) -> ScheduleBuilder {
+) -> DateScheduleBuilder {
   let hour = case self.hour {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     hour,
@@ -281,12 +305,15 @@ pub fn between_hours(
 
 /// Adds a specific day of the month on which the schedule should trigger.
 /// If other specific days are already set, appends the given day.
-pub fn on_day_of_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+pub fn on_day_of_month(
+  self: DateScheduleBuilder,
+  value: Int,
+) -> DateScheduleBuilder {
   let day_of_month = case self.day_of_month {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -298,15 +325,15 @@ pub fn on_day_of_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
 
 /// Sets a range of days of the month during which the schedule should trigger.
 pub fn between_day_of_months(
-  self: ScheduleBuilder,
+  self: DateScheduleBuilder,
   start: Int,
   end: Int,
-) -> ScheduleBuilder {
+) -> DateScheduleBuilder {
   let day_of_month = case self.day_of_month {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -322,12 +349,12 @@ pub fn between_day_of_months(
 
 /// Adds a specific month in which the schedule should trigger.
 /// If other specific months are already set, appends the given month.
-pub fn on_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+pub fn on_month(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
   let month = case self.month {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -339,15 +366,15 @@ pub fn on_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
 
 /// Sets a range of months during which the schedule should trigger.
 pub fn between_months(
-  self: ScheduleBuilder,
+  self: DateScheduleBuilder,
   start: Int,
   end: Int,
-) -> ScheduleBuilder {
+) -> DateScheduleBuilder {
   let month = case self.month {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -358,62 +385,62 @@ pub fn between_months(
 }
 
 /// Shortcut function to set the schedule to trigger in January.
-pub fn on_januaries(self: ScheduleBuilder) {
+pub fn on_januaries(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in February.
-pub fn on_februaries(self: ScheduleBuilder) {
+pub fn on_februaries(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in March.
-pub fn on_marches(self: ScheduleBuilder) {
+pub fn on_marches(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in April.
-pub fn on_aprils(self: ScheduleBuilder) {
+pub fn on_aprils(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in May.
-pub fn on_mays(self: ScheduleBuilder) {
+pub fn on_mays(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in June.
-pub fn on_junes(self: ScheduleBuilder) {
+pub fn on_junes(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in July.
-pub fn on_julies(self: ScheduleBuilder) {
+pub fn on_julies(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in August.
-pub fn on_augusts(self: ScheduleBuilder) {
+pub fn on_augusts(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in September.
-pub fn on_septembers(self: ScheduleBuilder) {
+pub fn on_septembers(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in October.
-pub fn on_octobers(self: ScheduleBuilder) {
+pub fn on_octobers(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in November.
-pub fn on_novembers(self: ScheduleBuilder) {
+pub fn on_novembers(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in December.
-pub fn on_decembers(self: ScheduleBuilder) {
+pub fn on_decembers(self: DateScheduleBuilder) {
   on_month(self, 1)
 }
 
@@ -422,12 +449,15 @@ pub fn on_decembers(self: ScheduleBuilder) {
 
 /// Adds a specific day of the week on which the schedule should trigger.
 /// If other specific days are already set, appends the given day.
-pub fn on_day_of_week(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+pub fn on_day_of_week(
+  self: DateScheduleBuilder,
+  value: Int,
+) -> DateScheduleBuilder {
   let on_day_of_week = case self.day_of_week {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -439,15 +469,15 @@ pub fn on_day_of_week(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
 
 /// Sets a range of days of the week during which the schedule should trigger.
 pub fn between_day_of_weeks(
-  self: ScheduleBuilder,
+  self: DateScheduleBuilder,
   start: Int,
   end: Int,
-) -> ScheduleBuilder {
+) -> DateScheduleBuilder {
   let on_day_of_week = case self.day_of_week {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
   }
-  ScheduleBuilder(
+  DateScheduleBuilder(
     self.second,
     self.minute,
     self.hour,
@@ -458,42 +488,42 @@ pub fn between_day_of_weeks(
 }
 
 /// Shortcut function to set the schedule to trigger on Mondays.
-pub fn on_mondays(self: ScheduleBuilder) {
+pub fn on_mondays(self: DateScheduleBuilder) {
   on_day_of_week(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger on Thuesdays.
-pub fn on_thuesdays(self: ScheduleBuilder) {
+pub fn on_thuesdays(self: DateScheduleBuilder) {
   on_day_of_week(self, 2)
 }
 
 /// Shortcut function to set the schedule to trigger on Wednesdays.
-pub fn on_wednesdays(self: ScheduleBuilder) {
+pub fn on_wednesdays(self: DateScheduleBuilder) {
   on_day_of_week(self, 3)
 }
 
 /// Shortcut function to set the schedule to trigger on Thursdays.
-pub fn on_thursdays(self: ScheduleBuilder) {
+pub fn on_thursdays(self: DateScheduleBuilder) {
   on_day_of_week(self, 4)
 }
 
 /// Shortcut function to set the schedule to trigger on Fridays.
-pub fn on_fridays(self: ScheduleBuilder) {
+pub fn on_fridays(self: DateScheduleBuilder) {
   on_day_of_week(self, 5)
 }
 
 /// Shortcut function to set the schedule to trigger on Saturdays.
-pub fn on_saturdays(self: ScheduleBuilder) {
+pub fn on_saturdays(self: DateScheduleBuilder) {
   on_day_of_week(self, 6)
 }
 
 /// Shortcut function to set the schedule to trigger on Sundays.
-pub fn on_sundays(self: ScheduleBuilder) {
+pub fn on_sundays(self: DateScheduleBuilder) {
   on_day_of_week(self, 7)
 }
 
 /// Shortcut function to set the schedule to trigger on weekdays (Monday through Friday).
-pub fn on_weekdays(self: ScheduleBuilder) {
+pub fn on_weekdays(self: DateScheduleBuilder) {
   self
   |> on_mondays
   |> on_thuesdays
@@ -503,12 +533,12 @@ pub fn on_weekdays(self: ScheduleBuilder) {
 }
 
 /// Shortcut function to set the schedule to trigger on weekends (Saturday and Sunday).
-pub fn on_weekends(self: ScheduleBuilder) {
+pub fn on_weekends(self: DateScheduleBuilder) {
   self |> on_saturdays |> on_sundays
 }
 
-/// Convert the ScheduleBuilder to actual cron syntax
-pub fn to_cron_syntax(self: ScheduleBuilder) -> String {
+/// Convert the DateScheduleBuilder to actual cron syntax
+pub fn to_cron_syntax(self: DateScheduleBuilder) -> String {
   let second_str = time_value_to_string(self.second)
   let minute_str = time_value_to_string(self.minute)
   let hour_str = time_value_to_string(self.hour)
@@ -549,9 +579,46 @@ fn time_selection_to_string(selection: TimeSelection) -> String {
   }
 }
 
-/// Create Schedule from scheduleBuilder
-pub fn build_schedule(schedule: ScheduleBuilder) {
-  schedule
+/// Validate and create Schedule from scheduleBuilder 
+pub fn build_schedule(
+  schedule: DateScheduleBuilder,
+) -> Result(Schedule, DateError) {
+  // Validate each second constraint 
+  use second <- result.try(
+    time_value_in_range(schedule.second, within_range(_, "Seconds", 0, 60)),
+  )
+  // Validate each minute constraint 
+  use minute <- result.try(
+    time_value_in_range(schedule.minute, within_range(_, "Minutes", 0, 60)),
+  )
+  // Validate each hour constraint 
+  use hour <- result.try(
+    time_value_in_range(schedule.hour, within_range(_, "Hours", 0, 24)),
+  )
+  // Validate each day_of_month constraint 
+  use day_of_month <- result.try(
+    time_value_in_range(schedule.day_of_month, within_range(
+      _,
+      "Day of month",
+      1,
+      31,
+    )),
+  )
+  // Validate each month constraint 
+  use month <- result.try(
+    time_value_in_range(schedule.month, within_range(_, "Month", 1, 12)),
+  )
+  // Validate each day_of_week constraint 
+  use day_of_week <- result.map(
+    time_value_in_range(schedule.day_of_week, within_range(
+      _,
+      "Day of week",
+      1,
+      7,
+    )),
+  )
+
+  DateSchedule(second:, minute:, hour:, day_of_month:, month:, day_of_week:)
   |> Schedule
 }
 
@@ -782,8 +849,7 @@ fn get_next_run_date(state: State) {
 
     Schedule(schedule) -> {
       schedule
-      |> to_cron_syntax()
-      |> bg_jobs_ffi.get_next_run_date(birl.now() |> birl.to_erlang_datetime())
+      |> next_run_date(naive_datetime.now_utc(), _)
     }
   }
 }
@@ -821,6 +887,213 @@ fn execute_scheduled_job(job: jobs.Job, worker: jobs.Worker, state: State) {
     }
     Error(err), False -> {
       actor.send(state.self, messages.HandleError(job, err))
+    }
+  }
+}
+
+// Get next run date
+//---------------
+
+@internal
+pub fn next_run_date(
+  date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> #(#(Int, Int, Int), #(Int, Int, Int)) {
+  next_run_loop(date, date, schedule)
+}
+
+fn next_run_loop(
+  date: tempo.NaiveDateTime,
+  start_date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> #(#(Int, Int, Int), #(Int, Int, Int)) {
+  let new_date =
+    date
+    |> align_seconds(schedule)
+    |> align_minutes(schedule)
+    |> align_hours(schedule)
+    |> align_day(schedule)
+    |> align_month(schedule)
+
+  case naive_datetime.compare(new_date, start_date) {
+    // If date is same as start date, increase the seconds by one and 
+    // try again to get the next run date
+    order.Eq ->
+      next_run_loop(
+        naive_datetime.add(date, duration.seconds(1)),
+        start_date,
+        schedule,
+      )
+    order.Gt -> new_date |> naive_datetime.to_tuple
+    order.Lt -> panic as "Next run date is in the past"
+  }
+}
+
+@internal
+pub fn align_seconds(
+  date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> tempo.NaiveDateTime {
+  let second = naive_datetime.get_time(date) |> time.get_second()
+
+  case is_matching(second, schedule.second) {
+    True -> date
+    False -> {
+      let next_date = naive_datetime.add(date, duration.seconds(1))
+      align_seconds(next_date, schedule)
+    }
+  }
+}
+
+@internal
+pub fn align_minutes(
+  date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> tempo.NaiveDateTime {
+  let minute = naive_datetime.get_time(date) |> time.get_minute()
+
+  case is_matching(minute, schedule.minute) {
+    True -> date
+    False -> {
+      let next_date = naive_datetime.add(date, duration.minutes(1))
+      align_minutes(next_date, schedule)
+    }
+  }
+}
+
+@internal
+pub fn align_hours(
+  date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> tempo.NaiveDateTime {
+  let hour = naive_datetime.get_time(date) |> time.get_hour()
+
+  case is_matching(hour, schedule.hour) {
+    True -> date
+    False -> {
+      let next_date = naive_datetime.add(date, duration.hours(1))
+      align_hours(next_date, schedule)
+    }
+  }
+}
+
+@internal
+pub fn align_day(
+  date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> tempo.NaiveDateTime {
+  let day_of_month = naive_datetime.get_date(date) |> date.get_day()
+  let day_of_week =
+    naive_datetime.get_date(date) |> date.to_day_of_week_number()
+
+  // Match on either day of week, day of month or if both are Every
+  let match = case schedule.day_of_week, schedule.day_of_month {
+    Every, Every -> True
+    Specific(_), Specific(_) ->
+      [
+        is_matching(day_of_month, schedule.day_of_month),
+        is_matching(day_of_week, schedule.day_of_week),
+      ]
+      |> list.find(fn(v) { v })
+      |> result.is_ok
+    Every, Specific(_) -> is_matching(day_of_month, schedule.day_of_month)
+    Specific(_), Every -> is_matching(day_of_week, schedule.day_of_week)
+  }
+
+  case match {
+    True -> date
+    False -> {
+      let next_date = naive_datetime.add(date, duration.days(1))
+      align_day(next_date, schedule)
+    }
+  }
+}
+
+@internal
+pub fn align_month(
+  date: tempo.NaiveDateTime,
+  schedule: DateSchedule,
+) -> tempo.NaiveDateTime {
+  let year = naive_datetime.get_date(date) |> date.get_year()
+  let month = naive_datetime.get_date(date) |> date.get_month()
+  let month_number = month |> month.to_int()
+
+  case is_matching(month_number, schedule.month) {
+    True -> date
+    False -> {
+      let days = month.days(of: month, in: year)
+      let next_date = naive_datetime.add(date, duration.days(days))
+      align_month(next_date, schedule)
+    }
+  }
+}
+
+// Get next run date utils
+//---------------
+
+fn is_matching(unit: Int, schedule: TimeValue) -> Bool {
+  case schedule {
+    Every -> Ok(Nil)
+    Specific(l) -> {
+      list.find(l, fn(i) {
+        case i {
+          Range(start, end) -> unit > start && unit < end
+          Value(val) -> unit == val
+        }
+      })
+      |> result.replace(Nil)
+    }
+  }
+  |> result.is_ok
+}
+
+/// Validate a specific value is within a range
+fn within_range(
+  v: Int,
+  name: String,
+  min: Int,
+  max: Int,
+) -> Result(Int, DateError) {
+  case min <= v && v <= max {
+    True -> Ok(v)
+    False ->
+      Error(OutOfBoundsError(
+        name
+        <> " must be between "
+        <> int.to_string(min)
+        <> " and "
+        <> int.to_string(max)
+        <> ", found: "
+        <> int.to_string(v),
+      ))
+  }
+}
+
+/// Validate all entries in a TimeValue is within a range
+fn time_value_in_range(
+  time_value: TimeValue,
+  validator: fn(Int) -> Result(Int, DateError),
+) -> Result(TimeValue, DateError) {
+  case time_value {
+    Every -> Ok(Every)
+    Specific(list) -> {
+      list.map(list, fn(d) {
+        case d {
+          Value(v) -> {
+            validator(v)
+            |> result.map(Value)
+          }
+          Range(start, end) -> {
+            validator(start)
+            |> result.try(fn(start) {
+              use end <- result.map(validator(end))
+              Range(start, end)
+            })
+          }
+        }
+      })
+      |> result.all()
+      |> result.map(Specific)
     }
   }
 }

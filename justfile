@@ -25,8 +25,9 @@ db_run:
      --name $DB_CONTAINER_NAME \
      postgres:14.1
 
+db_inspect +ARGS:
+    psql $DATABASE_URL {{ARGS}}
+
 wait-for-db:
     until psql $DATABASE_URL -c '\q' 2>/dev/null; do echo "Waiting for database..."; sleep 2; done; echo "Database is up!"
 
-db_inspect *ARGS:
-    psql $DATABASE_URL {{ARGS}}
