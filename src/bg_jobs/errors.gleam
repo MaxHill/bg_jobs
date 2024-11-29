@@ -1,4 +1,5 @@
 import gleam/otp/actor
+import tempo
 
 /// Represents errors that can occur during background job processing.
 pub type BgJobError {
@@ -8,4 +9,6 @@ pub type BgJobError {
   SetupError(actor.StartError)
   ScheduleError(String)
   UnknownError(String)
+  DateOutOfBoundsError(tempo.DateOutOfBoundsError)
+  TimeOutOfBoundsError(tempo.TimeOutOfBoundsError)
 }

@@ -1,13 +1,13 @@
 import bg_jobs/errors
 import bg_jobs/events
-import birl
 import gleam/string
 import logging.{Debug, Error, Info}
+import tempo/naive_datetime
 
 /// Listen to events and logg them using the [logging](https://hexdocs.pm/logging/) library
 ///
 pub fn listner(event: events.Event) {
-  let now = birl.now() |> birl.to_iso8601()
+  let now = naive_datetime.now_utc() |> naive_datetime.to_string()
   case event {
     events.JobEnqueuedEvent(job) ->
       logging.log(Info, now <> "|JobEnqueued|job_name:" <> job.name)
@@ -100,5 +100,9 @@ fn error_to_string(error: errors.BgJobError) {
     errors.SetupError(_) -> "SetupError|message:Could not start actor"
     errors.UnknownError(reason) -> "UnknownError|message:" <> reason
     errors.ScheduleError(reason) -> "ScheduleError|message:" <> reason
+    errors.DateOutOfBoundsError(err) ->
+      "DateOutOfBoundsError|error" <> string.inspect(err)
+    errors.TimeOutOfBoundsError(err) ->
+      "TimeOutOfBoundsError|error" <> string.inspect(err)
   }
 }

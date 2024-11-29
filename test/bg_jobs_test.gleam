@@ -14,6 +14,8 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import sqlight
+import tempo/duration
+import tempo/naive_datetime
 import test_helpers
 import test_helpers/jobs as jobs_setup
 import test_helpers/jobs/failing_job
@@ -255,13 +257,20 @@ pub fn handle_abandoned_jobs_test() {
   let assert Ok(_) =
     sqlight.query(
       "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
-      VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '2023-01-01 00:00:00', ?)
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?)
       RETURNING *;",
       conn,
       [
         sqlight.text(uuid.v4_string()),
         sqlight.text(log_job.job_name),
         sqlight.text(log_job.to_string(log_job.Payload("test"))),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(
+          naive_datetime.now_utc()
+          |> naive_datetime.subtract(duration.days(10))
+          |> naive_datetime.to_string(),
+        ),
         sqlight.text("default_queue"),
       ],
       utils.discard_decode,
@@ -271,8 +280,8 @@ pub fn handle_abandoned_jobs_test() {
 
   process.kill(process.subject_owner(queue))
 
-  // Wait for kill to happen
-  process.sleep(100)
+  // Wait for kill and restart to happen
+  process.sleep(1000)
 
   let assert Ok(new_queue) = chip.find(bg.queue_registry, "default_queue")
   new_queue |> should.not_equal(queue)

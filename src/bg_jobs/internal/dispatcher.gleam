@@ -3,13 +3,14 @@ import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/dispatcher_messages as messages
 import bg_jobs/internal/registries
+import bg_jobs/internal/utils
 import bg_jobs/jobs
-import birl
 import gleam/erlang/process
 import gleam/function
 import gleam/list
 import gleam/option
 import gleam/otp/actor
+import tempo/naive_datetime
 import youid/uuid
 
 import chip
@@ -84,35 +85,46 @@ pub fn dispatcher_loop(
           let job = state.db_adapter.enqueue_job(name, payload, available_at)
           process.send(client, job)
           case job {
-            Ok(job) -> state.send_event(events.JobEnqueuedEvent(job))
-            Error(e) -> state.send_event(events.QueueErrorEvent(name, e))
+            Ok(job) -> {
+              state.send_event(events.JobEnqueuedEvent(job))
+            }
+            Error(e) -> {
+              state.send_event(events.QueueErrorEvent(name, e))
+            }
           }
         }
         Error(_) -> {
-          let job =
-            jobs.Job(
-              id: uuid.v4_string(),
-              name: job_name,
-              payload: payload,
-              attempts: 0,
-              created_at: birl.now() |> birl.to_erlang_datetime(),
-              available_at: birl.to_erlang_datetime(
-                birl.from_erlang_universal_datetime(available_at),
-              ),
-              reserved_at: option.None,
-              reserved_by: option.None,
-            )
-          actor.send(
-            state.self,
-            messages.HandleDispatchError(
-              job,
-              "Could not enqueue job with no worker",
-            ),
-          )
+          case utils.from_tuple(available_at) {
+            Error(e) -> {
+              process.send(client, Error(e))
+            }
+            Ok(available_at) -> {
+              let job =
+                jobs.Job(
+                  id: uuid.v4_string(),
+                  name: job_name,
+                  payload: payload,
+                  attempts: 0,
+                  created_at: naive_datetime.now_utc()
+                    |> naive_datetime.to_tuple(),
+                  available_at: available_at |> naive_datetime.to_tuple(),
+                  reserved_at: option.None,
+                  reserved_by: option.None,
+                )
+              actor.send(
+                state.self,
+                messages.HandleDispatchError(
+                  job,
+                  "Could not enqueue job with no worker",
+                ),
+              )
 
-          let error = errors.DispatchJobError("No worker for job: " <> job_name)
-          process.send(client, Error(error))
-          state.send_event(events.QueueErrorEvent(name, error))
+              let error =
+                errors.DispatchJobError("No worker for job: " <> job_name)
+              process.send(client, Error(error))
+              state.send_event(events.QueueErrorEvent(name, error))
+            }
+          }
         }
       }
       actor.continue(state)

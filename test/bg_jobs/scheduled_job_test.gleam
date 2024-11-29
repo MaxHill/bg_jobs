@@ -1,11 +1,11 @@
 import bg_jobs/jobs
 import bg_jobs/scheduled_job
 import bg_jobs/sqlite_db_adapter
-import birl/duration as birl_duration
 import gleam/erlang/process
 import gleam/list
 import gleeunit/should
 import sqlight
+import tempo/duration
 import tempo/naive_datetime
 import test_helpers
 import test_helpers/jobs as jobs_setup
@@ -35,14 +35,6 @@ pub fn test_schedule_intervals() {
   should.equal(
     scheduled_job.new_interval_weeks(1),
     scheduled_job.Interval(scheduled_job.Week(1)),
-  )
-  should.equal(
-    scheduled_job.new_interval_months(6),
-    scheduled_job.Interval(scheduled_job.Month(6)),
-  )
-  should.equal(
-    scheduled_job.new_interval_years(1),
-    scheduled_job.Interval(scheduled_job.Year(1)),
   )
 }
 
@@ -100,7 +92,6 @@ pub fn schedule_test() {
       sqlite_db_adapter.decode_enqueued_db_row,
     )
     |> should.be_ok
-    |> list.map(should.be_ok)
 
   job_list
   |> list.length
@@ -115,38 +106,27 @@ pub fn schedule_test() {
 // Schedule
 //---------------
 
-pub fn to_birl_test() {
+pub fn to_gtempo_test() {
   should.equal(
-    birl_duration.milli_seconds(100),
-    scheduled_job.to_birl(scheduled_job.Millisecond(100)),
+    duration.milliseconds(100),
+    scheduled_job.to_gtempo(scheduled_job.Millisecond(100)),
   )
   should.equal(
-    birl_duration.seconds(10),
-    scheduled_job.to_birl(scheduled_job.Second(10)),
+    duration.seconds(10),
+    scheduled_job.to_gtempo(scheduled_job.Second(10)),
   )
   should.equal(
-    birl_duration.minutes(5),
-    scheduled_job.to_birl(scheduled_job.Minute(5)),
+    duration.minutes(5),
+    scheduled_job.to_gtempo(scheduled_job.Minute(5)),
   )
   should.equal(
-    birl_duration.hours(2),
-    scheduled_job.to_birl(scheduled_job.Hour(2)),
+    duration.hours(2),
+    scheduled_job.to_gtempo(scheduled_job.Hour(2)),
   )
+  should.equal(duration.days(1), scheduled_job.to_gtempo(scheduled_job.Day(1)))
   should.equal(
-    birl_duration.days(1),
-    scheduled_job.to_birl(scheduled_job.Day(1)),
-  )
-  should.equal(
-    birl_duration.weeks(1),
-    scheduled_job.to_birl(scheduled_job.Week(1)),
-  )
-  should.equal(
-    birl_duration.months(6),
-    scheduled_job.to_birl(scheduled_job.Month(6)),
-  )
-  should.equal(
-    birl_duration.years(1),
-    scheduled_job.to_birl(scheduled_job.Year(1)),
+    duration.weeks(1),
+    scheduled_job.to_gtempo(scheduled_job.Week(1)),
   )
 }
 
@@ -367,7 +347,6 @@ pub fn align_months() {
 
 // Build schedule test
 //---------------
-
 pub fn success_build_schedule_second_test() {
   scheduled_job.new_schedule()
   |> scheduled_job.every_second()
@@ -727,4 +706,67 @@ pub fn on_months_test() {
       day_of_week: scheduled_job.Every,
     )),
   )
+}
+
+pub fn error_month_with_different_days_test() {
+  // Check January allows 31 days
+  scheduled_job.new_schedule()
+  // Don't allow schedule to be on leap day
+  |> scheduled_job.on_day_of_month(29)
+  |> scheduled_job.on_month(1)
+  |> scheduled_job.build_schedule()
+  |> should.be_ok()
+
+  // Check February allows 28 days
+  scheduled_job.new_schedule()
+  // Don't allow schedule to be on leap day
+  |> scheduled_job.on_day_of_month(29)
+  |> scheduled_job.on_month(2)
+  // Should still be max 29 even if january is in there
+  |> scheduled_job.on_month(1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.OutOfBoundsError(
+    "Day of month must be between 1 and 28, found: 29",
+  ))
+
+  // Check April allows 30 days
+  scheduled_job.new_schedule()
+  |> scheduled_job.on_day_of_month(31)
+  |> scheduled_job.on_month(4)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.OutOfBoundsError(
+    "Day of month must be between 1 and 30, found: 31",
+  ))
+
+  // Check June allows 30 days
+  scheduled_job.new_schedule()
+  |> scheduled_job.on_day_of_month(31)
+  |> scheduled_job.on_month(6)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.OutOfBoundsError(
+    "Day of month must be between 1 and 30, found: 31",
+  ))
+
+  // Check September allows 30 days
+  scheduled_job.new_schedule()
+  |> scheduled_job.on_day_of_month(31)
+  |> scheduled_job.on_month(9)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.OutOfBoundsError(
+    "Day of month must be between 1 and 30, found: 31",
+  ))
+
+  // Check November allows 30 days
+  scheduled_job.new_schedule()
+  |> scheduled_job.on_day_of_month(31)
+  |> scheduled_job.on_month(9)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.OutOfBoundsError(
+    "Day of month must be between 1 and 30, found: 31",
+  ))
 }

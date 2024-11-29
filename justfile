@@ -25,7 +25,7 @@ db_run:
      --name $DB_CONTAINER_NAME \
      postgres:14.1
 
-db_inspect +ARGS:
+db_inspect *ARGS:
     psql $DATABASE_URL {{ARGS}}
 
 wait-for-db:

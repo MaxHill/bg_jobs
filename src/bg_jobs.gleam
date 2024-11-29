@@ -9,8 +9,6 @@ import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/jobs
 import bg_jobs/queue
 import bg_jobs/scheduled_job
-import birl
-import birl/duration
 import chip
 import gleam/erlang/process
 import gleam/list
@@ -18,6 +16,8 @@ import gleam/option
 import gleam/otp/actor
 import gleam/otp/supervisor
 import gleam/result
+import tempo/duration
+import tempo/naive_datetime
 
 /// Main type of the library, holds references queues, dispatcher, and scheduled jobs.
 /// This is then passed as an argument when you want to interact with the background 
@@ -403,17 +403,13 @@ pub fn enqueue_job(job_request: jobs.JobEnqueueRequest, bg: BgJobs) {
 fn available_at_from_availability(availability: jobs.JobAvailability) {
   case availability {
     jobs.AvailableNow -> {
-      birl.now() |> birl.to_erlang_datetime()
+      naive_datetime.now_utc() |> naive_datetime.to_tuple()
     }
-    jobs.AvailableAt(date) -> {
-      date
-      |> birl.from_erlang_local_datetime()
-      |> birl.to_erlang_datetime()
-    }
+    jobs.AvailableAt(date) -> date
     jobs.AvailableIn(delay) -> {
-      birl.now()
-      |> birl.add(duration.milli_seconds(delay))
-      |> birl.to_erlang_datetime()
+      naive_datetime.now_utc()
+      |> naive_datetime.add(duration.milliseconds(delay))
+      |> naive_datetime.to_tuple()
     }
   }
 }

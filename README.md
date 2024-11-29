@@ -41,6 +41,9 @@ This way if a worker crashes and the supervisor restarts it there is no
 abandoned jobs.
 
 
+# Time and date
+All dates should be passed in utc+0
+
 # Installation 
 
 ```sh
@@ -216,6 +219,13 @@ just watch-test # Run tests in watch mode
 # TODO
 - [x] Rename duration to clock / time something like that 
 - [x] Look over the public api so it makes sense
-- [ ] Make events module public
-- [ ] Mock the clock
-- [ ] Build a simulator 
+- [x] Make events module public
+- [ ] Document architecture
+- [ ] Document scheduling
+- [ ] Split db adapters to their own packages
+  Need to solve testing, since the tests depend on sqlite
+- [ ] Replace [chip](https://hexdocs.pm/chip/) with custom solution
+  Custom worker repository that also monitors and releases claimed jobs if a worker dies. 
+  This is handled today with the worker releasing claims when starting.
+  With the monitoring approach the worker does not have to come alive to prevent abandoned jobs.
+  (And we could also drop the queue-name probably)

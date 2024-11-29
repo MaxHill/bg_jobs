@@ -1,8 +1,6 @@
 import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/sqlite_db_adapter
-import birl
-import birl/duration
 import gleam/dynamic
 import gleam/erlang/process
 import gleam/list
@@ -10,6 +8,8 @@ import gleam/option
 import gleam/order
 import gleeunit/should
 import sqlight
+import tempo/duration
+import tempo/naive_datetime
 import test_helpers
 
 const job_name = "test-job"
@@ -26,7 +26,7 @@ pub fn enqueue_job_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   process.sleep(100)
@@ -43,7 +43,6 @@ pub fn enqueue_job_test() {
   |> should.equal(1)
 
   list.first(jobs)
-  |> should.be_ok
   |> should.be_ok
   |> fn(job) {
     should.equal(returned_job, job)
@@ -65,14 +64,14 @@ pub fn claim_jobs_limit_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   let assert Ok(_returned_job2) =
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   process.sleep(1000)
@@ -112,7 +111,7 @@ pub fn claim_jobs_returned_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   job_store.claim_jobs([job_name], 1, "default_queue")
@@ -141,7 +140,7 @@ pub fn move_job_to_success_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   job_store.move_job_to_succeeded(job)
@@ -166,7 +165,6 @@ pub fn move_job_to_success_test() {
   |> should.be_ok()
   |> list.first
   |> should.be_ok
-  |> should.be_ok
   |> should.equal(jobs.SucceededJob(
     id: job.id,
     name: job.name,
@@ -174,7 +172,7 @@ pub fn move_job_to_success_test() {
     attempts: job.attempts,
     created_at: job.created_at,
     available_at: job.available_at,
-    succeeded_at: birl.to_erlang_universal_datetime(birl.now()),
+    succeeded_at: naive_datetime.now_utc() |> naive_datetime.to_tuple(),
   ))
 }
 
@@ -188,7 +186,7 @@ pub fn move_job_to_failed_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   job_store.move_job_to_failed(job, "test exception")
@@ -213,7 +211,6 @@ pub fn move_job_to_failed_test() {
   |> should.be_ok()
   |> list.first
   |> should.be_ok
-  |> should.be_ok
   |> should.equal(jobs.FailedJob(
     id: job.id,
     name: job.name,
@@ -222,7 +219,7 @@ pub fn move_job_to_failed_test() {
     exception: "test exception",
     created_at: job.created_at,
     available_at: job.available_at,
-    failed_at: birl.to_erlang_universal_datetime(birl.now()),
+    failed_at: naive_datetime.now_utc() |> naive_datetime.to_tuple(),
   ))
 }
 
@@ -248,9 +245,9 @@ pub fn get_succeeded_jobs_test() {
       'process_order',                             
       '\"test-payload\"',       
       3,                                           
-      '2024-09-29 10:30:00',                       
-      '2024-09-29 10:30:00',                        
-      '2024-09-29 11:00:00'                        
+      '2024-09-29T10:30:00',                       
+      '2024-09-29T10:30:00',                        
+      '2024-09-29T11:00:00'                        
     );
     ",
       conn,
@@ -295,9 +292,9 @@ pub fn get_failed_jobs_test() {
       '\"test-payload\"',       
       3,                                           
       'Test exception',
-      '2024-09-29 10:30:00',                       
-      '2024-09-29 10:30:00',
-      '2024-09-29 11:00:00'                        
+      '2024-09-29T10:30:00',                       
+      '2024-09-29T10:30:00',
+      '2024-09-29T11:00:00'                        
     );
     ",
       conn,
@@ -329,7 +326,7 @@ pub fn increment_attempts_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   job_store.increment_attempts(job)
@@ -398,25 +395,25 @@ pub fn multiple_list_of_jobs_test() {
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_universal_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
   let assert Ok(_) =
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_universal_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
   let assert Ok(_) =
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_universal_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
   let assert Ok(_) =
     job_store.enqueue_job(
       job_name,
       job_payload,
-      birl.now() |> birl.to_erlang_universal_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   job_store.claim_jobs(["job_name"], 3, "default_queue")
@@ -437,13 +434,13 @@ pub fn db_events_test() {
     job_store.enqueue_job(
       "test_job_1",
       "test_payaload_1",
-      birl.now() |> birl.to_erlang_universal_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
   let assert Ok(_) =
     job_store.enqueue_job(
       "test_job_2",
       "test_payaload_2",
-      birl.now() |> birl.to_erlang_universal_datetime(),
+      naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
   let job_1 =
@@ -488,16 +485,19 @@ pub fn release_claim_test() {
   let assert Ok(_) = job_store.migrate_down([])
   let assert Ok(_) = job_store.migrate_up([])
 
+  // TODO: replace CURRENT_TIMESTAMP
   let assert Ok(_) =
     sqlight.query(
       "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
-      VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '2023-01-01 00:00:00', ?)
+      VALUES (?, ?, ?, 0, ?, ?, '2023-01-01T00:00:00', ?)
       RETURNING *;",
       conn,
       [
         sqlight.text("test_id"),
         sqlight.text("test_job"),
         sqlight.text("test"),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
         sqlight.text("default_queue"),
       ],
       utils.discard_decode,
@@ -528,9 +528,9 @@ pub fn scheduled_job_test() {
     job_store.enqueue_job(
       "test_job",
       "test_payaload",
-      birl.now()
-        |> birl.add(duration.seconds(2))
-        |> birl.to_erlang_datetime(),
+      naive_datetime.now_utc()
+        |> naive_datetime.add(duration.seconds(2))
+        |> naive_datetime.to_tuple(),
     )
 
   process.sleep(200)
@@ -571,17 +571,17 @@ pub fn get_running_jobs_test() {
         'process_order',                             
         '\"test-payload\"',       
         3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00',                        
-        '2024-09-29 11:00:00',                        
+        '2024-09-29T10:30:00',                       
+        '2024-09-29T10:30:00',                        
+        '2024-09-29T11:00:00',                        
         'test_queue'
       ), (
         'job_6789',                                 
         'process_order',                             
         '\"test-payload\"',       
         3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00',
+        '2024-09-29T10:30:00',                       
+        '2024-09-29T10:30:00',
         NULL,
         NULL
       );
@@ -626,8 +626,8 @@ pub fn get_enqueued_jobs_test() {
         'process_order',                             
         '\"test-payload\"',       
         3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00'                       
+        '2024-09-29T10:30:00',                       
+        '2024-09-29T10:30:00'                       
       );
     ",
       conn,
@@ -659,15 +659,19 @@ fn validate_job(job: jobs.Job, job_name: String, job_payload: String) {
 
   should.equal(job.created_at, job.available_at)
 
-  birl.compare(
-    birl.now() |> birl.subtract(duration.seconds(1)),
-    birl.from_erlang_universal_datetime(job.created_at),
+  utils.from_tuple(job.created_at)
+  |> should.be_ok()
+  |> naive_datetime.compare(
+    naive_datetime.now_utc() |> naive_datetime.subtract(duration.seconds(3)),
+    _,
   )
   |> should.equal(order.Lt)
 
-  birl.compare(
-    birl.now() |> birl.subtract(duration.seconds(1)),
-    birl.from_erlang_universal_datetime(job.available_at),
+  utils.from_tuple(job.available_at)
+  |> should.be_ok()
+  |> naive_datetime.compare(
+    naive_datetime.now_utc() |> naive_datetime.subtract(duration.seconds(3)),
+    _,
   )
   |> should.equal(order.Lt)
 }

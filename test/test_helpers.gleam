@@ -94,5 +94,9 @@ fn error_to_string(error: errors.BgJobError) {
     errors.SetupError(_) -> "DbError|message:Could not start actor"
     errors.UnknownError(reason) -> "DbError|message:" <> reason
     errors.ScheduleError(reason) -> "ScheduleError|message:" <> reason
+    errors.DateOutOfBoundsError(err) ->
+      "DateOutOfBoundsError|message:" <> string.inspect(err)
+    errors.TimeOutOfBoundsError(err) ->
+      "TimeOutOfBoundsError|message" <> string.inspect(err)
   }
 }

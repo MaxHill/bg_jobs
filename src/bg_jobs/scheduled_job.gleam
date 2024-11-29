@@ -7,8 +7,6 @@ import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import birl
-import birl/duration as birl_duration
 import chip
 import gleam/erlang/process
 import gleam/function
@@ -17,7 +15,6 @@ import gleam/list
 import gleam/order
 import gleam/otp/actor
 import gleam/result
-import gleam/string
 import tempo
 import tempo/date
 import tempo/duration
@@ -50,21 +47,17 @@ pub type Duration {
   Hour(Int)
   Day(Int)
   Week(Int)
-  Month(Int)
-  Year(Int)
 }
 
 @internal
-pub fn to_birl(duration: Duration) {
+pub fn to_gtempo(duration: Duration) {
   case duration {
-    Millisecond(i) -> birl_duration.milli_seconds(i)
-    Second(i) -> birl_duration.seconds(i)
-    Minute(i) -> birl_duration.minutes(i)
-    Hour(i) -> birl_duration.hours(i)
-    Day(i) -> birl_duration.days(i)
-    Week(i) -> birl_duration.weeks(i)
-    Month(i) -> birl_duration.months(i)
-    Year(i) -> birl_duration.years(i)
+    Millisecond(i) -> duration.milliseconds(i)
+    Second(i) -> duration.seconds(i)
+    Minute(i) -> duration.minutes(i)
+    Hour(i) -> duration.hours(i)
+    Day(i) -> duration.days(i)
+    Week(i) -> duration.weeks(i)
   }
 }
 
@@ -96,16 +89,6 @@ pub fn new_interval_days(days: Int) {
 /// Create interval schedule in weeks
 pub fn new_interval_weeks(weeks: Int) {
   Interval(Week(weeks))
-}
-
-/// Create interval schedule in months
-pub fn new_interval_months(months: Int) {
-  Interval(Month(months))
-}
-
-/// Create interval schedule in years
-pub fn new_interval_years(years: Int) {
-  Interval(Year(years))
 }
 
 // Schdedule
@@ -553,18 +536,37 @@ pub fn build_schedule(
   use hour <- result.try(
     time_value_in_range(schedule.hour, within_range(_, "Hours", 0, 24)),
   )
+
+  // Validate each month constraint 
+  use month <- result.try(
+    time_value_in_range(schedule.month, within_range(_, "Month", 1, 12)),
+  )
+
+  let has_february = value_exists_in_time_value(2, month)
+
+  let has_30_month =
+    [
+      value_exists_in_time_value(4, month),
+      value_exists_in_time_value(6, month),
+      value_exists_in_time_value(9, month),
+      value_exists_in_time_value(11, month),
+    ]
+    |> list.any(function.identity)
+
+  let max_day_of_month = case has_february, has_30_month {
+    True, _ -> 28
+    _, True -> 30
+    _, _ -> 31
+  }
+
   // Validate each day_of_month constraint 
   use day_of_month <- result.try(
     time_value_in_range(schedule.day_of_month, within_range(
       _,
       "Day of month",
       1,
-      31,
+      max_day_of_month,
     )),
-  )
-  // Validate each month constraint 
-  use month <- result.try(
-    time_value_in_range(schedule.month, within_range(_, "Month", 1, 12)),
   )
   // Validate each day_of_week constraint 
   use day_of_week <- result.map(
@@ -800,9 +802,9 @@ fn loop(message: Message, state: State) -> actor.Next(Message, State) {
 fn get_next_run_date(state: State) {
   case state.schedule {
     Interval(interval) -> {
-      birl.now()
-      |> birl.add(to_birl(interval))
-      |> birl.to_erlang_datetime()
+      naive_datetime.now_utc()
+      |> naive_datetime.add(to_gtempo(interval))
+      |> naive_datetime.to_tuple()
     }
 
     Schedule(schedule) -> {
@@ -1052,6 +1054,24 @@ fn time_value_in_range(
       })
       |> result.all()
       |> result.map(Specific)
+    }
+  }
+}
+
+/// Check if a value exists in a TimeValue (value or range)
+fn value_exists_in_time_value(value: Int, time_value: TimeValue) -> Bool {
+  case time_value {
+    Every -> False
+    // Value always exists in "Every"
+    Specific(list) -> {
+      list.any(list, fn(d) {
+        case d {
+          Value(v) -> v == value
+          // Direct match
+          Range(start, end) -> start <= value && value <= end
+          // Range check
+        }
+      })
     }
   }
 }

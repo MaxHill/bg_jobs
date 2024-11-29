@@ -3,15 +3,14 @@ import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import birl
-import decode
+import decode/zero
 import gleam/dynamic
 import gleam/int
 import gleam/list
-import gleam/option
 import gleam/result
 import gleam/string
 import sqlight
+import tempo/naive_datetime
 import youid/uuid
 
 /// Create a new sqlite_db_adapter
@@ -68,7 +67,7 @@ fn move_job_to_succeeded(
   conn: sqlight.Connection,
   send_event: events.EventListener,
 ) {
-  fn(job: jobs.Job) {
+  fn(job: jobs.Job) -> Result(Nil, errors.BgJobError) {
     send_event(events.DbEvent("move_job_to_succeeded", [string.inspect(job)]))
     use _ <- result.try(query(
       send_event,
@@ -78,6 +77,9 @@ fn move_job_to_succeeded(
       [sqlight.text(job.id)],
       utils.discard_decode,
     ))
+
+    use created_at <- result.try(utils.from_tuple(job.created_at))
+    use avaliable_at <- result.try(utils.from_tuple(job.created_at))
 
     query(
       send_event,
@@ -91,7 +93,7 @@ fn move_job_to_succeeded(
         available_at, 
         succeeded_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       RETURNING *;
     ",
       conn,
@@ -100,12 +102,9 @@ fn move_job_to_succeeded(
         sqlight.text(job.name),
         sqlight.text(job.payload),
         sqlight.int(job.attempts),
-        sqlight.text(
-          birl.to_iso8601(birl.from_erlang_universal_datetime(job.created_at)),
-        ),
-        sqlight.text(
-          birl.to_iso8601(birl.from_erlang_universal_datetime(job.available_at)),
-        ),
+        sqlight.text(created_at |> naive_datetime.to_string()),
+        sqlight.text(avaliable_at |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
       ],
       decode_succeeded_db_row,
     )
@@ -132,8 +131,6 @@ fn get_succeeded_jobs(
       [sqlight.int(limit)],
       decode_succeeded_db_row,
     )
-    |> result.map(result.all)
-    |> result.flatten
   }
 }
 
@@ -153,8 +150,6 @@ fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
       [sqlight.int(limit)],
       decode_failed_db_row,
     )
-    |> result.map(result.all)
-    |> result.flatten
   }
 }
 
@@ -180,6 +175,9 @@ fn move_job_to_failed(
       utils.discard_decode,
     ))
 
+    use created_at <- result.try(utils.from_tuple(job.created_at))
+    use avaliable_at <- result.try(utils.from_tuple(job.created_at))
+
     let sql =
       "
       INSERT INTO jobs_failed (
@@ -192,7 +190,7 @@ fn move_job_to_failed(
         available_at, 
         failed_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING *;
     "
 
@@ -206,12 +204,9 @@ fn move_job_to_failed(
         sqlight.text(job.payload),
         sqlight.int(job.attempts),
         sqlight.text(exception),
-        sqlight.text(
-          birl.to_iso8601(birl.from_erlang_universal_datetime(job.created_at)),
-        ),
-        sqlight.text(
-          birl.to_iso8601(birl.from_erlang_universal_datetime(job.available_at)),
-        ),
+        sqlight.text(created_at |> naive_datetime.to_string()),
+        sqlight.text(avaliable_at |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
       ],
       decode_failed_db_row,
     )
@@ -225,8 +220,8 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
     let now =
-      birl.now()
-      |> birl.to_iso8601()
+      naive_datetime.now_utc()
+      |> naive_datetime.to_string()
 
     let job_names_sql =
       list.fold(job_names, "", fn(acc, _) {
@@ -256,8 +251,6 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
       ])
 
     query(send_event, sql, conn, arguments, decode_enqueued_db_row)
-    |> result.map(result.all)
-    |> result.flatten
   }
 }
 
@@ -281,7 +274,6 @@ fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
         "Should never be possible if insert is successfull",
       ))
     })
-    |> result.flatten
   }
 }
 
@@ -295,13 +287,14 @@ fn get_running_jobs_by_queue_name(
     send_event(events.DbEvent("get_running_jobs", [queue_id]))
     query(
       send_event,
-      "SELECT * FROM jobs WHERE reserved_at < CURRENT_TIMESTAMP AND reserved_by = ?",
+      "SELECT * FROM jobs WHERE reserved_at < ? AND reserved_by = ?",
       conn,
-      [sqlight.text(queue_id)],
+      [
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(queue_id),
+      ],
       decode_enqueued_db_row,
     )
-    |> result.map(result.all)
-    |> result.flatten
   }
 }
 
@@ -317,8 +310,6 @@ fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener)
       [sqlight.text(job_name)],
       decode_enqueued_db_row,
     )
-    |> result.map(result.all)
-    |> result.flatten
   }
 }
 
@@ -348,7 +339,6 @@ fn increment_attempts(
         "Should never be possible if update is successfull",
       ))
     })
-    |> result.flatten
   }
 }
 
@@ -360,16 +350,12 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
     payload: String,
     avaliable_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   ) {
-    send_event(
-      events.DbEvent("enqueue_job", [
-        job_name,
-        payload,
-        birl.from_erlang_universal_datetime(avaliable_at) |> birl.to_iso8601(),
-      ]),
+    use available_at_string <- result.try(
+      utils.from_tuple(avaliable_at) |> result.map(naive_datetime.to_string),
     )
-    let avaliable_at =
-      birl.from_erlang_universal_datetime(avaliable_at)
-      |> birl.to_iso8601()
+    send_event(
+      events.DbEvent("enqueue_job", [job_name, payload, available_at_string]),
+    )
 
     let sql =
       "
@@ -392,8 +378,8 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
         sqlight.text(uuid.v4_string()),
         sqlight.text(job_name),
         sqlight.text(payload),
-        sqlight.text(birl.now() |> birl.to_iso8601()),
-        sqlight.text(avaliable_at),
+        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(available_at_string),
       ],
       decode_enqueued_db_row,
     )
@@ -403,7 +389,6 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
         "Should never be possible if insert is successfull",
       ))
     })
-    |> result.flatten
   }
 }
 
@@ -417,8 +402,8 @@ pub fn migrate_up(conn: sqlight.Connection) {
       name VARCHAR NOT NULL,
       payload TEXT NOT NULL, 
       attempts INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-      available_at DATETIME DEFAULT CURRENT_TIMESTAMP  NOT NULL,
+      created_at DATETIME NOT NULL,
+      available_at DATETIME NOT NULL,
       reserved_at DATETIME,
       reserved_by TEXT
     );
@@ -431,7 +416,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
       exception VARCHAR NOT NULL,
       created_at DATETIME NOT NULL,
       available_at DATETIME NOT NULL,
-      failed_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+      failed_at DATETIME NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS jobs_succeeded (
@@ -441,7 +426,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
       attempts INTEGER NOT NULL,
       created_at DATETIME NOT NULL,
       available_at DATETIME NOT NULL,
-      succeeded_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+      succeeded_at DATETIME NOT NULL
     );
     "
 
@@ -475,165 +460,93 @@ pub fn migrate_down(conn: sqlight.Connection) {
 //---------------
 
 @internal
-pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at_string <- decode.parameter
-      use available_at_string <- decode.parameter
-      use reserved_at_string <- decode.parameter
-      use reserved_by <- decode.parameter
-
-      use created_at <- result.try(
-        birl.from_naive(created_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(created_at_string)),
-      )
-      use available_at <- result.try(
-        birl.from_naive(available_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(created_at_string)),
-      )
-
-      use reserved_at <- result.map(
-        option.map(reserved_at_string, fn(dt) {
-          birl.from_naive(dt)
-          |> result.map(birl.to_erlang_datetime)
-          |> result.replace_error(errors.ParseDateError(dt))
-        })
-        |> utils.transpose_option_to_result,
-      )
-
-      jobs.Job(
-        id,
-        name,
-        payload,
-        attempts,
-        created_at,
-        available_at,
-        reserved_at,
-        reserved_by,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, decode.string)
-    |> decode.field(5, decode.string)
-    |> decode.field(6, decode.optional(decode.string))
-    |> decode.field(7, decode.optional(decode.string))
-
-  decoder
-  |> decode.from(data)
+pub fn decode_enqueued_db_row(
+  dynamic: dynamic.Dynamic,
+) -> Result(jobs.Job, List(dynamic.DecodeError)) {
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(jobs.Job(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
+  zero.run(dynamic, decoder)
 }
 
 @internal
-pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use created_at_string <- decode.parameter
-      use available_at_string <- decode.parameter
-      use succeeded_at_string <- decode.parameter
+pub fn decode_succeeded_db_row(
+  dynamic: dynamic.Dynamic,
+) -> Result(jobs.SucceededJob, List(dynamic.DecodeError)) {
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use succeeded_at <- zero.field(6, timestamp_decoder())
+    zero.success(jobs.SucceededJob(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      succeeded_at:,
+    ))
+  }
 
-      use created_at <- result.try(
-        birl.from_naive(created_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(created_at_string)),
-      )
-
-      use available_at <- result.try(
-        birl.from_naive(available_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(created_at_string)),
-      )
-
-      use succeeded_at <- result.map(
-        birl.from_naive(succeeded_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(succeeded_at_string)),
-      )
-
-      jobs.SucceededJob(
-        id,
-        name,
-        payload,
-        attempts,
-        created_at,
-        available_at,
-        succeeded_at,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, decode.string)
-    |> decode.field(5, decode.string)
-    |> decode.field(6, decode.string)
-
-  decoder
-  |> decode.from(data)
+  zero.run(dynamic, decoder)
 }
 
 @internal
-pub fn decode_failed_db_row(data: dynamic.Dynamic) {
-  let decoder =
-    decode.into({
-      use id <- decode.parameter
-      use name <- decode.parameter
-      use payload <- decode.parameter
-      use attempts <- decode.parameter
-      use exception <- decode.parameter
-      use created_at_string <- decode.parameter
-      use available_at_string <- decode.parameter
-      use failed_at_string <- decode.parameter
+pub fn decode_failed_db_row(
+  dynamic: dynamic.Dynamic,
+) -> Result(jobs.FailedJob, List(dynamic.DecodeError)) {
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use exception <- zero.field(4, zero.string)
+    use created_at <- zero.field(5, timestamp_decoder())
+    use available_at <- zero.field(6, timestamp_decoder())
+    use failed_at <- zero.field(7, timestamp_decoder())
 
-      use created_at <- result.try(
-        birl.from_naive(created_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(created_at_string)),
-      )
+    zero.success(jobs.FailedJob(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      exception:,
+      created_at:,
+      available_at:,
+      failed_at:,
+    ))
+  }
 
-      use available_at <- result.try(
-        birl.from_naive(available_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(created_at_string)),
-      )
+  zero.run(dynamic, decoder)
+}
 
-      use failed_at <- result.map(
-        birl.from_naive(failed_at_string)
-        |> result.map(birl.to_erlang_datetime)
-        |> result.replace_error(errors.ParseDateError(failed_at_string)),
-      )
-
-      jobs.FailedJob(
-        id,
-        name,
-        payload,
-        attempts,
-        exception,
-        created_at,
-        available_at,
-        failed_at,
-      )
-    })
-    |> decode.field(0, decode.string)
-    |> decode.field(1, decode.string)
-    |> decode.field(2, decode.string)
-    |> decode.field(3, decode.int)
-    |> decode.field(4, decode.string)
-    |> decode.field(5, decode.string)
-    |> decode.field(6, decode.string)
-    |> decode.field(7, decode.string)
-
-  decoder
-  |> decode.from(data)
+fn timestamp_decoder() {
+  use str <- zero.then(zero.string)
+  case naive_datetime.parse(str, "YYYY-MM-DDTHH:mm:ss") {
+    Ok(timestamp) -> zero.success(timestamp |> naive_datetime.to_tuple)
+    Error(_) -> {
+      zero.failure(#(#(0, 0, 0), #(0, 0, 0)), "timestamp")
+    }
+  }
 }

@@ -2,8 +2,8 @@ import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/postgres_db_adapter/sql
+import bg_jobs/internal/utils
 import bg_jobs/jobs
-import birl
 import decode/zero
 import gleam/dynamic
 import gleam/int
@@ -12,6 +12,7 @@ import gleam/option
 import gleam/result
 import gleam/string
 import pog
+import tempo/naive_datetime
 import youid/uuid
 
 /// Create a new postgres_db_adapter
@@ -72,7 +73,10 @@ fn move_job_to_succeeded(conn: pog.Connection, send_event: events.EventListener)
         job.attempts,
         erlang_to_timestamp(job.created_at),
         erlang_to_timestamp(job.available_at),
-        erlang_to_timestamp(birl.now() |> birl.to_erlang_datetime()),
+        erlang_to_timestamp(
+          naive_datetime.now_utc()
+          |> naive_datetime.to_tuple(),
+        ),
       )
       |> result.map(fn(res) {
         send_event(events.DbResponseEvent(string.inspect(res)))
@@ -113,7 +117,9 @@ fn move_job_to_failed(conn: pog.Connection, send_event: events.EventListener) {
         exception,
         erlang_to_timestamp(job.created_at),
         erlang_to_timestamp(job.available_at),
-        erlang_to_timestamp(birl.now() |> birl.to_erlang_datetime()),
+        erlang_to_timestamp(
+          naive_datetime.now_utc() |> naive_datetime.to_tuple(),
+        ),
       )
       |> result.map(fn(res) {
         send_event(events.DbResponseEvent(string.inspect(res)))
@@ -208,8 +214,8 @@ fn claim_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
     let now =
-      birl.now()
-      |> birl.to_erlang_datetime()
+      naive_datetime.now_utc()
+      |> naive_datetime.to_tuple()
       |> erlang_to_timestamp
 
     let job_names_sql =
@@ -404,25 +410,30 @@ fn increment_attempts(conn: pog.Connection, send_event: events.EventListener) {
 
 /// Enqueues a job for queues to claim an process
 ///
-fn enqueue_job(conn: pog.Connection, send_event: events.EventListener) {
+fn enqueue_job(
+  conn: pog.Connection,
+  send_event: events.EventListener,
+) -> fn(String, String, #(#(Int, Int, Int), #(Int, Int, Int))) ->
+  Result(jobs.Job, errors.BgJobError) {
   fn(
     job_name: String,
     payload: String,
     avaliable_at: #(#(Int, Int, Int), #(Int, Int, Int)),
-  ) {
+  ) -> Result(jobs.Job, errors.BgJobError) {
+    use avaliable_at_string <- result.try(
+      utils.from_tuple(avaliable_at) |> result.map(naive_datetime.to_string),
+    )
     send_event(
-      events.DbEvent("enqueue_job", [
-        job_name,
-        payload,
-        birl.from_erlang_universal_datetime(avaliable_at) |> birl.to_iso8601(),
-      ]),
+      events.DbEvent("enqueue_job", [job_name, payload, avaliable_at_string]),
     )
     sql.enqueue_job(
       conn,
       uuid.v4_string(),
       job_name,
       payload,
-      birl.now() |> birl.to_erlang_datetime() |> erlang_to_timestamp(),
+      naive_datetime.now_utc()
+        |> naive_datetime.to_tuple()
+        |> erlang_to_timestamp(),
       avaliable_at |> erlang_to_timestamp(),
     )
     |> result.map(fn(returned) {
