@@ -245,9 +245,9 @@ pub fn get_succeeded_jobs_test() {
       'process_order',                             
       '\"test-payload\"',       
       3,                                           
-      '2024-09-29T10:30:00',                       
-      '2024-09-29T10:30:00',                        
-      '2024-09-29T11:00:00'                        
+      '2024-09-29 10:30:00',                       
+      '2024-09-29 10:30:00',                        
+      '2024-09-29 11:00:00'                        
     );
     ",
       conn,
@@ -292,9 +292,9 @@ pub fn get_failed_jobs_test() {
       '\"test-payload\"',       
       3,                                           
       'Test exception',
-      '2024-09-29T10:30:00',                       
-      '2024-09-29T10:30:00',
-      '2024-09-29T11:00:00'                        
+      '2024-09-29 10:30:00',                       
+      '2024-09-29 10:30:00',
+      '2024-09-30 11:00:00'                        
     );
     ",
       conn,
@@ -311,7 +311,7 @@ pub fn get_failed_jobs_test() {
       "Test exception",
       #(#(2024, 9, 29), #(10, 30, 0)),
       #(#(2024, 9, 29), #(10, 30, 0)),
-      #(#(2024, 9, 29), #(11, 0, 0)),
+      #(#(2024, 9, 30), #(11, 0, 0)),
     ),
   ])
 }
@@ -489,15 +489,15 @@ pub fn release_claim_test() {
   let assert Ok(_) =
     sqlight.query(
       "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)
-      VALUES (?, ?, ?, 0, ?, ?, '2023-01-01T00:00:00', ?)
+      VALUES (?, ?, ?, 0, ?, ?, '2023-01-01 00:00:00', ?)
       RETURNING *;",
       conn,
       [
         sqlight.text("test_id"),
         sqlight.text("test_job"),
         sqlight.text("test"),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> sqlite_db_adapter.to_db_date()),
+        sqlight.text(naive_datetime.now_utc() |> sqlite_db_adapter.to_db_date()),
         sqlight.text("default_queue"),
       ],
       utils.discard_decode,
@@ -571,17 +571,17 @@ pub fn get_running_jobs_test() {
         'process_order',                             
         '\"test-payload\"',       
         3,                                           
-        '2024-09-29T10:30:00',                       
-        '2024-09-29T10:30:00',                        
-        '2024-09-29T11:00:00',                        
+        '2024-09-29 10:30:00',                       
+        '2024-09-29 10:30:00',                        
+        '2024-09-29 11:00:00',                        
         'test_queue'
       ), (
         'job_6789',                                 
         'process_order',                             
         '\"test-payload\"',       
         3,                                           
-        '2024-09-29T10:30:00',                       
-        '2024-09-29T10:30:00',
+        '2024-09-29 10:30:00',                       
+        '2024-09-29 10:30:00',
         NULL,
         NULL
       );
@@ -626,8 +626,8 @@ pub fn get_enqueued_jobs_test() {
         'process_order',                             
         '\"test-payload\"',       
         3,                                           
-        '2024-09-29T10:30:00',                       
-        '2024-09-29T10:30:00'                       
+        '2024-09-29 10:30:00',                       
+        '2024-09-29 10:30:00'                       
       );
     ",
       conn,

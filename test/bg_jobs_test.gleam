@@ -264,12 +264,12 @@ pub fn handle_abandoned_jobs_test() {
         sqlight.text(uuid.v4_string()),
         sqlight.text(log_job.job_name),
         sqlight.text(log_job.to_string(log_job.Payload("test"))),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> sqlite_db_adapter.to_db_date()),
+        sqlight.text(naive_datetime.now_utc() |> sqlite_db_adapter.to_db_date()),
         sqlight.text(
           naive_datetime.now_utc()
           |> naive_datetime.subtract(duration.days(10))
-          |> naive_datetime.to_string(),
+          |> sqlite_db_adapter.to_db_date(),
         ),
         sqlight.text("default_queue"),
       ],

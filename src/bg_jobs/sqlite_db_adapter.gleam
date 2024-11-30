@@ -10,6 +10,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import sqlight
+import tempo
 import tempo/naive_datetime
 import youid/uuid
 
@@ -102,9 +103,9 @@ fn move_job_to_succeeded(
         sqlight.text(job.name),
         sqlight.text(job.payload),
         sqlight.int(job.attempts),
-        sqlight.text(created_at |> naive_datetime.to_string()),
-        sqlight.text(avaliable_at |> naive_datetime.to_string()),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(created_at |> to_db_date()),
+        sqlight.text(avaliable_at |> to_db_date()),
+        sqlight.text(naive_datetime.now_utc() |> to_db_date()),
       ],
       decode_succeeded_db_row,
     )
@@ -204,9 +205,9 @@ fn move_job_to_failed(
         sqlight.text(job.payload),
         sqlight.int(job.attempts),
         sqlight.text(exception),
-        sqlight.text(created_at |> naive_datetime.to_string()),
-        sqlight.text(avaliable_at |> naive_datetime.to_string()),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(created_at |> to_db_date()),
+        sqlight.text(avaliable_at |> to_db_date()),
+        sqlight.text(naive_datetime.now_utc() |> to_db_date()),
       ],
       decode_failed_db_row,
     )
@@ -221,7 +222,7 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
     let now =
       naive_datetime.now_utc()
-      |> naive_datetime.to_string()
+      |> to_db_date()
 
     let job_names_sql =
       list.fold(job_names, "", fn(acc, _) {
@@ -290,7 +291,7 @@ fn get_running_jobs_by_queue_name(
       "SELECT * FROM jobs WHERE reserved_at < ? AND reserved_by = ?",
       conn,
       [
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> to_db_date()),
         sqlight.text(queue_id),
       ],
       decode_enqueued_db_row,
@@ -351,7 +352,7 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
     avaliable_at: #(#(Int, Int, Int), #(Int, Int, Int)),
   ) {
     use available_at_string <- result.try(
-      utils.from_tuple(avaliable_at) |> result.map(naive_datetime.to_string),
+      utils.from_tuple(avaliable_at) |> result.map(to_db_date),
     )
     send_event(
       events.DbEvent("enqueue_job", [job_name, payload, available_at_string]),
@@ -378,7 +379,7 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
         sqlight.text(uuid.v4_string()),
         sqlight.text(job_name),
         sqlight.text(payload),
-        sqlight.text(naive_datetime.now_utc() |> naive_datetime.to_string()),
+        sqlight.text(naive_datetime.now_utc() |> to_db_date()),
         sqlight.text(available_at_string),
       ],
       decode_enqueued_db_row,
@@ -541,9 +542,15 @@ pub fn decode_failed_db_row(
   zero.run(dynamic, decoder)
 }
 
+@internal
+pub fn to_db_date(date: tempo.NaiveDateTime) -> String {
+  date
+  |> naive_datetime.format("YYYY-MM-DD HH:mm:ss")
+}
+
 fn timestamp_decoder() {
   use str <- zero.then(zero.string)
-  case naive_datetime.parse(str, "YYYY-MM-DDTHH:mm:ss") {
+  case naive_datetime.parse(str, "YYYY-MM-DD HH:mm:ss") {
     Ok(timestamp) -> zero.success(timestamp |> naive_datetime.to_tuple)
     Error(_) -> {
       zero.failure(#(#(0, 0, 0), #(0, 0, 0)), "timestamp")
