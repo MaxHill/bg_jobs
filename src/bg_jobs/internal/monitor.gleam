@@ -6,7 +6,6 @@ import bg_jobs/internal/utils
 import chip
 import gleam/erlang/process
 import gleam/function
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
