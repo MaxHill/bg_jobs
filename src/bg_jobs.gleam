@@ -3,6 +3,7 @@ import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/dispatcher
 import bg_jobs/internal/dispatcher_messages
+import bg_jobs/internal/monitor
 import bg_jobs/internal/queue_messages
 import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages
@@ -38,6 +39,7 @@ pub type BgJobs {
     queue_registry: registries.QueueRegistry,
     dispatcher_registry: registries.DispatcherRegistry,
     scheduled_jobs_registry: registries.ScheduledJobRegistry,
+    monitor_registry: registries.MonitorRegistry,
   )
 }
 
@@ -50,6 +52,7 @@ type ContextBuilder {
     queue_registry: registries.QueueRegistry,
     dispatcher_registry: option.Option(registries.DispatcherRegistry),
     scheduled_jobs_registry: option.Option(registries.ScheduledJobRegistry),
+    monitor_registry: option.Option(registries.MonitorRegistry),
   )
 }
 
@@ -59,6 +62,7 @@ type Context {
     queue_registry: registries.QueueRegistry,
     dispatcher_registry: registries.DispatcherRegistry,
     scheduled_jobs_registry: registries.ScheduledJobRegistry,
+    monitor_registry: registries.MonitorRegistry,
   )
 }
 
@@ -212,6 +216,15 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
         init: fn(children) {
           children
           |> registry_workers()
+          // Add monitor
+          |> supervisor.add(
+            supervisor.worker(fn(context: Context) {
+              monitor.build(
+                registry: context.monitor_registry,
+                db_adapter: spec.db_adapter,
+              )
+            }),
+          )
           // Add the dispatch worker
           |> supervisor.add(
             supervisor.worker(fn(context: Context) {
@@ -231,6 +244,7 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
                 queue_spec
                 |> queue.with_event_listeners(spec.event_listeners)
                 |> queue.build(
+                  monitor_registry: context.monitor_registry,
                   registry: context.queue_registry,
                   db_adapter: spec.db_adapter,
                   spec: _,
@@ -247,6 +261,7 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
                 scheduled_jobs_spec
                 |> scheduled_job.with_event_listeners(spec.event_listeners)
                 |> scheduled_job.build(
+                  monitor_registry: context.monitor_registry,
                   registry: context.scheduled_jobs_registry,
                   dispatch_registry: context.dispatcher_registry,
                   db_adapter: spec.db_adapter,
@@ -268,12 +283,14 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
         queue_registry,
         dispatcher_registry,
         scheduled_jobs_registry,
+        monitor_registry,
       )) = process.receive(self, 500)
       Ok(BgJobs(
         supervisor:,
         queue_registry:,
         dispatcher_registry:,
         scheduled_jobs_registry:,
+        monitor_registry:,
       ))
     }
     Error(e) -> {
@@ -294,22 +311,20 @@ fn registry_workers(children) {
         caller: process.Subject(registries.Registries),
         registry: registries.QueueRegistry,
       ) {
-        ContextBuilder(caller, registry, option.None, option.None)
+        ContextBuilder(caller, registry, option.None, option.None, option.None)
       },
     ),
   )
   |> supervisor.add(
     supervisor.worker(fn(_context: ContextBuilder) { chip.start() })
     |> supervisor.returning(
-      fn(
-        context_builder: ContextBuilder,
-        registry: registries.DispatcherRegistry,
-      ) {
+      fn(context_builder, registry: registries.DispatcherRegistry) {
         ContextBuilder(
           caller: context_builder.caller,
           queue_registry: context_builder.queue_registry,
           dispatcher_registry: option.Some(registry),
           scheduled_jobs_registry: option.None,
+          monitor_registry: option.None,
         )
       },
     ),
@@ -321,13 +336,30 @@ fn registry_workers(children) {
         context_builder: ContextBuilder,
         registry: registries.ScheduledJobRegistry,
       ) {
+        ContextBuilder(
+          caller: context_builder.caller,
+          queue_registry: context_builder.queue_registry,
+          dispatcher_registry: context_builder.dispatcher_registry,
+          scheduled_jobs_registry: option.Some(registry),
+          monitor_registry: option.None,
+        )
+      },
+    ),
+  )
+  |> supervisor.add(
+    supervisor.worker(fn(_context: ContextBuilder) { chip.start() })
+    |> supervisor.returning(
+      fn(context_builder: ContextBuilder, registry: registries.MonitorRegistry) {
         let assert option.Some(dispatcher_registry) =
           context_builder.dispatcher_registry
+        let assert option.Some(scheduled_jobs_registry) =
+          context_builder.scheduled_jobs_registry
         Context(
           caller: context_builder.caller,
           queue_registry: context_builder.queue_registry,
           dispatcher_registry:,
-          scheduled_jobs_registry: registry,
+          scheduled_jobs_registry:,
+          monitor_registry: registry,
         )
       },
     ),
@@ -345,6 +377,7 @@ fn supervisor_ready() {
         context.queue_registry,
         context.dispatcher_registry,
         context.scheduled_jobs_registry,
+        context.monitor_registry,
       ),
     )
     Nil

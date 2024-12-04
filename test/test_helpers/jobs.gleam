@@ -8,6 +8,8 @@ import sqlight
 import test_helpers
 import test_helpers/jobs/failing_job
 import test_helpers/jobs/failing_job_interval
+import test_helpers/jobs/forever_job
+import test_helpers/jobs/forever_job_interval
 import test_helpers/jobs/log_job
 import test_helpers/jobs/log_job_interval
 
@@ -46,7 +48,11 @@ pub fn setup(
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_queue(
       queue("default_queue")
-      |> queue.with_workers([failing_job.worker(logger), log_job.worker(logger)]),
+      |> queue.with_workers([
+        failing_job.worker(logger),
+        log_job.worker(logger),
+        forever_job.worker(logger),
+      ]),
     )
     |> bg_jobs.with_queue(queue("second_queue"))
     |> bg_jobs.build()
@@ -87,7 +93,7 @@ pub fn setup_interval(
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_scheduled_job(
       scheduled_job.Spec(
-        schedule: scheduled_job.Interval(scheduled_job.Millisecond(10)),
+        schedule: scheduled_job.new_interval_milliseconds(10),
         worker: log_job_interval.worker(logger),
         max_retries: 2,
         init_timeout: 1000,
@@ -97,8 +103,18 @@ pub fn setup_interval(
     )
     |> bg_jobs.with_scheduled_job(
       scheduled_job.Spec(
-        schedule: scheduled_job.Interval(scheduled_job.Millisecond(10)),
+        schedule: scheduled_job.new_interval_milliseconds(10),
         worker: failing_job_interval.worker(logger),
+        max_retries: 3,
+        init_timeout: 1000,
+        poll_interval: 10,
+        event_listeners: [],
+      ),
+    )
+    |> bg_jobs.with_scheduled_job(
+      scheduled_job.Spec(
+        schedule: scheduled_job.new_interval_milliseconds(10),
+        worker: forever_job_interval.worker(logger),
         max_retries: 3,
         init_timeout: 1000,
         poll_interval: 10,

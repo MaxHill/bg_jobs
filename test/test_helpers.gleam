@@ -80,6 +80,8 @@ pub fn new_logger_event_listner(
       "DbEvent|" <> event <> "|input:" <> string.join(input, with: ",")
     events.MigrateDownComplete -> "MigrateDownComplete"
     events.MigrateUpComplete -> "MigrateUpComplete"
+    events.MonitorReleasingReserved(_) -> "MonitorReleasingReserved"
+    events.MonitorReleasedJob(_) -> "MonitorReleasedJob"
   }
   |> fn(str) { "Event:" <> str }
   |> log_message(logger)

@@ -22,10 +22,12 @@ pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener))
     enqueue_job: enqueue_job(conn, send_event),
     claim_jobs: claim_jobs(conn, send_event),
     release_claim: release_claim(conn, send_event),
+    release_jobs_reserved_by: release_jobs_reserved_by(conn, send_event),
     move_job_to_succeeded: move_job_to_succeeded(conn, send_event),
     move_job_to_failed: move_job_to_failed(conn, send_event),
     increment_attempts: increment_attempts(conn, send_event),
     get_enqueued_jobs: get_enqueued_jobs(conn, send_event),
+    get_running_jobs: get_running_jobs(conn, send_event),
     get_running_jobs_by_queue_name: get_running_jobs_by_queue_name(
       conn,
       send_event,
@@ -278,6 +280,32 @@ fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Release claim from job that are clamied by a queue, to allow another queue to process it
+///
+fn release_jobs_reserved_by(
+  conn: sqlight.Connection,
+  send_event: events.EventListener,
+) {
+  fn(reserved_by: String) {
+    send_event(events.DbEvent("release_jobs_claimed_by", [reserved_by]))
+    let sql =
+      "
+        UPDATE jobs
+           SET reserved_at = NULL, reserved_by = NULL
+         WHERE reserved_by = ? 
+     RETURNING *;
+    "
+
+    query(
+      send_event,
+      sql,
+      conn,
+      [sqlight.text(reserved_by)],
+      decode_enqueued_db_row,
+    )
+  }
+}
+
 /// Get a specific queues running jobs
 ///
 fn get_running_jobs_by_queue_name(
@@ -288,7 +316,7 @@ fn get_running_jobs_by_queue_name(
     send_event(events.DbEvent("get_running_jobs", [queue_id]))
     query(
       send_event,
-      "SELECT * FROM jobs WHERE reserved_at < ? AND reserved_by = ?",
+      "SELECT * FROM jobs WHERE reserved_at <= ? AND reserved_by = ?",
       conn,
       [
         sqlight.text(naive_datetime.now_utc() |> to_db_date()),
@@ -309,6 +337,21 @@ fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener)
       "SELECT * FROM jobs WHERE name = ? AND reserved_at is NULL",
       conn,
       [sqlight.text(job_name)],
+      decode_enqueued_db_row,
+    )
+  }
+}
+
+/// Get jobs from the database that has not been picked up by any queue
+///
+fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
+  fn() {
+    send_event(events.DbEvent("get_running_jobs", []))
+    query(
+      send_event,
+      "SELECT * FROM jobs WHERE reserved_at IS NOT NULL",
+      conn,
+      [],
       decode_enqueued_db_row,
     )
   }

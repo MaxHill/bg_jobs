@@ -195,7 +195,7 @@ queue.with_event_listener(my_custom_event_listener())
 ```
 
 ## Db adapters
-bg_jobs includes two built-in database adapters: Postgres (via pgo) and 
+bg_jobs includes two built-in database adapters: Postgres (via pog) and 
 SQLite (via sqlight). These adapters allow seamless integration with 
 popular databases, enabling you to use background job processing 
 without additional dependencies. If you are using a different database, 

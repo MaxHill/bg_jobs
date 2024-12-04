@@ -3,6 +3,7 @@ import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/dispatcher
 import bg_jobs/internal/dispatcher_messages
+import bg_jobs/internal/monitor
 import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
 import bg_jobs/internal/utils
@@ -625,6 +626,7 @@ pub fn with_event_listeners(
 }
 
 pub fn build(
+  monitor_registry monitor_registry: registries.MonitorRegistry,
   registry registry: registries.ScheduledJobRegistry,
   dispatch_registry dispatch_registry: registries.DispatcherRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
@@ -634,9 +636,8 @@ pub fn build(
     init: fn() {
       let self = process.new_subject()
 
-      // Cleanup previously in flight jobs by this queue name
-      let assert Ok(_) =
-        utils.remove_in_flight_jobs(spec.worker.job_name, db_adapter)
+      let assert Ok(monitor_subject) = chip.find(monitor_registry, "monitor")
+      monitor.register(monitor_subject, self)
 
       // Register the queue under a name on initialization
       chip.register(
@@ -777,7 +778,11 @@ fn loop(message: Message, state: State) -> actor.Next(Message, State) {
 
     messages.ProcessJobs -> {
       let jobs = case
-        state.db_adapter.claim_jobs([state.worker.job_name], 1, state.name)
+        state.db_adapter.claim_jobs(
+          [state.worker.job_name],
+          1,
+          utils.pid_to_string(process.subject_owner(state.self)),
+        )
       {
         Ok(jobs) -> {
           jobs

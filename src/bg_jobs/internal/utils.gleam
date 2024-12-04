@@ -1,8 +1,8 @@
-import bg_jobs/db_adapter
 import bg_jobs/errors
+import bg_jobs/internal/bg_jobs_ffi
 import decode
 import gleam/dynamic
-import gleam/list
+import gleam/erlang/process
 import gleam/option
 import gleam/result
 import tempo/date
@@ -52,18 +52,10 @@ pub fn from_tuple(erl_date: #(#(Int, Int, Int), #(Int, Int, Int))) {
   naive_datetime.new(date, time)
 }
 
-/// Remove in flight jobs to avoid orphaned jobs.
-/// This would happen if a queue has active jobs and get's restarted, 
-/// either because of a new deploy or a panic
-///
-pub fn remove_in_flight_jobs(
-  queue_name: String,
-  db_adapter: db_adapter.DbAdapter,
-) {
-  db_adapter.get_running_jobs_by_queue_name(queue_name)
-  |> result.map(fn(jobs) {
-    jobs
-    |> list.map(fn(job) { job.id })
-    |> list.map(db_adapter.release_claim(_))
-  })
+pub fn pid_to_string(pid: process.Pid) {
+  bg_jobs_ffi.pid_to_binary_ffi(pid)
+}
+
+pub fn string_to_pid(str: String) {
+  bg_jobs_ffi.binary_to_pid_ffi(str)
 }

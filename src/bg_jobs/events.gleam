@@ -1,5 +1,6 @@
 import bg_jobs/errors
 import bg_jobs/jobs
+import gleam/erlang/process
 import gleam/list
 import gleam/otp/actor
 
@@ -19,6 +20,8 @@ pub type Event {
   DbEvent(operation: String, input: List(String))
   DbResponseEvent(response: String)
   DbErrorEvent(error: errors.BgJobError)
+  MonitorReleasingReserved(pid: process.Pid)
+  MonitorReleasedJob(jobs.Job)
 
   MigrateUpComplete
   MigrateDownComplete

@@ -224,6 +224,69 @@ WHERE
   |> pog.execute(db)
 }
 
+/// A row you get from running the `get_running_jobs_by_queue_name` query
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_running_jobs_by_queue_name.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type GetRunningJobsByQueueNameRow {
+  GetRunningJobsByQueueNameRow(
+    id: String,
+    name: String,
+    payload: String,
+    attempts: Int,
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
+    reserved_by: Option(String),
+  )
+}
+
+/// Runs the `get_running_jobs_by_queue_name` query
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_running_jobs_by_queue_name.sql`.
+///
+/// > 🐿️ This function was generated automatically using v2.0.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn get_running_jobs_by_queue_name(db, arg_1) {
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(GetRunningJobsByQueueNameRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
+
+  let query =
+    "SELECT
+    *
+FROM
+    jobs
+WHERE
+    reserved_at <= CURRENT_TIMESTAMP
+    AND reserved_by = $1
+"
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `get_succeeded_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_succeeded_jobs.sql`.
 ///
@@ -508,6 +571,71 @@ RETURNING
   |> pog.execute(db)
 }
 
+/// A row you get from running the `release_jobs_reserved_by` query
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_jobs_reserved_by.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type ReleaseJobsReservedByRow {
+  ReleaseJobsReservedByRow(
+    id: String,
+    name: String,
+    payload: String,
+    attempts: Int,
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
+    reserved_by: Option(String),
+  )
+}
+
+/// Runs the `release_jobs_reserved_by` query
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_jobs_reserved_by.sql`.
+///
+/// > 🐿️ This function was generated automatically using v2.0.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn release_jobs_reserved_by(db, arg_1) {
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(ReleaseJobsReservedByRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
+  }
+
+  let query =
+    "UPDATE
+    jobs
+SET
+    reserved_at = NULL,
+    reserved_by = NULL
+WHERE
+    reserved_by = $1
+RETURNING
+    *;
+"
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `get_enqueued_jobs` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/get_enqueued_jobs.sql`.
 ///
@@ -596,7 +724,7 @@ pub type GetRunningJobsRow {
 /// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn get_running_jobs(db, arg_1) {
+pub fn get_running_jobs(db) {
   let decoder = {
     use id <- zero.field(0, zero.string)
     use name <- zero.field(1, zero.string)
@@ -624,12 +752,10 @@ pub fn get_running_jobs(db, arg_1) {
 FROM
     jobs
 WHERE
-    reserved_at < CURRENT_TIMESTAMP
-    AND reserved_by = $1
+    reserved_by IS NOT NULL
 "
 
   pog.query(query)
-  |> pog.parameter(pog.text(arg_1))
   |> pog.returning(zero.run(_, decoder))
   |> pog.execute(db)
 }

@@ -1,5 +1,6 @@
 import bg_jobs/db_adapter
 import bg_jobs/events
+import bg_jobs/internal/monitor
 import bg_jobs/internal/queue_messages as messages
 import bg_jobs/internal/registries
 import bg_jobs/internal/utils
@@ -118,6 +119,7 @@ pub fn with_event_listener(spec: Spec, event_listener: events.EventListener) {
 ///
 @internal
 pub fn build(
+  monitor_registry monitor_registry: registries.MonitorRegistry,
   registry registry: registries.QueueRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
   spec spec: Spec,
@@ -126,8 +128,10 @@ pub fn build(
     init: fn() {
       let self = process.new_subject()
 
+      let assert Ok(monitor_subject) = chip.find(monitor_registry, "monitor")
+      monitor.register(monitor_subject, self)
       // Cleanup previously in flight jobs by this queue name
-      let assert Ok(_) = utils.remove_in_flight_jobs(spec.name, db_adapter)
+      // let assert Ok(_) = utils.remove_in_flight_jobs(spec.name, db_adapter)
 
       // Register the queue under a name on initialization
       chip.register(
@@ -189,6 +193,7 @@ fn loop(
   state: QueueState,
 ) -> actor.Next(messages.Message, QueueState) {
   case message {
+    messages.Shutdown -> actor.Stop(process.Normal)
     messages.StartPolling -> {
       process.send_after(
         state.self,
@@ -241,7 +246,7 @@ fn loop(
             state.db_adapter.claim_jobs(
               list.map(state.workers, fn(job) { job.job_name }),
               new_jobs_limit,
-              state.name,
+              utils.pid_to_string(process.subject_owner(state.self)),
             )
           {
             Ok(jobs) -> jobs

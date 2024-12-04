@@ -1,5 +1,6 @@
 import bg_jobs/errors
 import bg_jobs/events
+import bg_jobs/internal/utils
 import gleam/string
 import logging.{Debug, Error, Info}
 import tempo/naive_datetime
@@ -88,6 +89,10 @@ pub fn listner(event: events.Event) {
       )
     events.MigrateDownComplete -> logging.log(Info, "MigrateDownComplete")
     events.MigrateUpComplete -> logging.log(Info, "MigrateUpComplete")
+    events.MonitorReleasingReserved(pid) ->
+      logging.log(Info, "MonitorReleasingReserved" <> utils.pid_to_string(pid))
+    events.MonitorReleasedJob(job) ->
+      logging.log(Info, "MonitorReleasedJob" <> job.id)
   }
   Nil
 }

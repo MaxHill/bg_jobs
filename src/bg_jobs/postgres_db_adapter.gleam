@@ -23,10 +23,12 @@ pub fn new(conn: pog.Connection, event_listners: List(events.EventListener)) {
     enqueue_job: enqueue_job(conn, send_event),
     claim_jobs: claim_jobs(conn, send_event),
     release_claim: release_claim(conn, send_event),
+    release_jobs_reserved_by: release_jobs_reserved_by(conn, send_event),
     move_job_to_succeeded: move_job_to_succeeded(conn, send_event),
     move_job_to_failed: move_job_to_failed(conn, send_event),
     increment_attempts: increment_attempts(conn, send_event),
     get_enqueued_jobs: get_enqueued_jobs(conn, send_event),
+    get_running_jobs: get_running_jobs(conn, send_event),
     get_running_jobs_by_queue_name: get_running_jobs_by_queue_name(
       conn,
       send_event,
@@ -304,6 +306,44 @@ fn release_claim(conn: pog.Connection, send_event: events.EventListener) {
   }
 }
 
+/// Release claim from job that are clamied by a queue, to allow another queue to process it
+///
+fn release_jobs_reserved_by(
+  conn: pog.Connection,
+  send_event: events.EventListener,
+) {
+  fn(reserved_by: String) {
+    send_event(events.DbEvent("claim_jobs", [reserved_by]))
+    sql.release_jobs_reserved_by(conn, reserved_by)
+    |> result.map(fn(returned) {
+      let pog.Returned(_row_count, rows) = returned
+      rows
+      |> list.map(fn(row) {
+        jobs.Job(
+          id: row.id,
+          name: row.name,
+          payload: row.payload,
+          attempts: row.attempts,
+          created_at: timestamp_to_erlang(row.created_at),
+          available_at: timestamp_to_erlang(row.available_at),
+          reserved_at: row.reserved_at |> option.map(timestamp_to_erlang),
+          reserved_by: row.reserved_by,
+        )
+      })
+    })
+    |> result.map(fn(res) {
+      send_event(events.DbResponseEvent(string.inspect(res)))
+      res
+    })
+    |> result.map_error(string.inspect)
+    |> result.map_error(errors.DbError)
+    |> result.map_error(fn(err) {
+      send_event(events.DbErrorEvent(err))
+      err
+    })
+  }
+}
+
 /// Get a specific queues running jobs
 ///
 fn get_running_jobs_by_queue_name(
@@ -311,8 +351,8 @@ fn get_running_jobs_by_queue_name(
   send_event: events.EventListener,
 ) {
   fn(queue_id: String) {
-    send_event(events.DbEvent("get_running_jobs", [queue_id]))
-    sql.get_running_jobs(conn, queue_id)
+    send_event(events.DbEvent("get_running_jobs_by_queue_name", [queue_id]))
+    sql.get_running_jobs_by_queue_name(conn, queue_id)
     |> result.map(fn(returned) {
       let pog.Returned(_row_count, row) = returned
       list.map(row, fn(job) {
@@ -347,6 +387,40 @@ fn get_enqueued_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(job_name: String) {
     send_event(events.DbEvent("get_enqueued_jobs", [job_name]))
     sql.get_enqueued_jobs(conn, job_name)
+    |> result.map(fn(returned) {
+      let pog.Returned(_row_count, row) = returned
+      list.map(row, fn(job) {
+        jobs.Job(
+          id: job.id,
+          name: job.name,
+          payload: job.payload,
+          attempts: job.attempts,
+          created_at: timestamp_to_erlang(job.created_at),
+          available_at: timestamp_to_erlang(job.available_at),
+          reserved_at: job.reserved_at |> option.map(timestamp_to_erlang),
+          reserved_by: job.reserved_by,
+        )
+      })
+    })
+    |> result.map(fn(res) {
+      send_event(events.DbResponseEvent(string.inspect(res)))
+      res
+    })
+    |> result.map_error(string.inspect)
+    |> result.map_error(errors.DbError)
+    |> result.map_error(fn(err) {
+      send_event(events.DbErrorEvent(err))
+      err
+    })
+  }
+}
+
+/// Get jobs from the database that has been picked up by any queue
+///
+fn get_running_jobs(conn: pog.Connection, send_event: events.EventListener) {
+  fn() {
+    send_event(events.DbEvent("get_running_jobs", []))
+    sql.get_running_jobs(conn)
     |> result.map(fn(returned) {
       let pog.Returned(_row_count, row) = returned
       list.map(row, fn(job) {

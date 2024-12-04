@@ -1,6 +1,7 @@
 import bg_jobs/jobs
 
 pub type Message {
+  Shutdown
   StartPolling
   StopPolling
   WaitBetweenPoll
