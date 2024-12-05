@@ -6,6 +6,7 @@ import bg_jobs/internal/utils
 import chip
 import gleam/erlang/process
 import gleam/function
+import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -53,6 +54,9 @@ pub fn build(
           [],
           _,
         ))
+
+      // Release all
+      process.send(self, messages.ReleaseAbandonedReservations)
 
       actor.Ready(
         state,
@@ -118,8 +122,7 @@ fn loop(
         option.Some(selector),
       )
     }
-
-    messages.ClearMissed -> {
+    messages.ReleaseAbandonedReservations -> {
       let assert Ok(jobs) = state.db_adapter.get_running_jobs()
 
       jobs

@@ -4,12 +4,23 @@ import gleam/erlang/process
 //---------------
 pub type Message {
   Shutdown
-  /// Registers an actor for monitoring
+  /// Register a new actor process for monitoring.
+  ///
+  /// Allows monitor to start tracking the actor,
+  /// enabling lifecycle management and job reservation tracking.
   Register(process.Pid)
-  /// Cleanup claimed jobs when an actor dies
+  /// Handle the termination of a monitored actor process.
+  ///
+  /// Triggers cleanup operations for jobs associated with the 
+  /// terminated process.
   Down(process.ProcessDown)
-  /// Clears out claimed jobs where the down message has been missed
-  /// This can happen if the monitor actor is down or message got 
-  /// lost along the way
-  ClearMissed
+
+  /// Proactively releases job reservations for processes that are no longer alive.
+  ///
+  /// This message serves as a fallback mechanism for job reservation cleanup. While 
+  /// job reservations are typically released automatically when a process dies, this 
+  /// message provides an additional safety net to handle scenarios where the standard 
+  /// down message might have been missed or not processed.
+  ///
+  ReleaseAbandonedReservations
 }
