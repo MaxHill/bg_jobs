@@ -24,7 +24,7 @@ pub type Payload {
 
 pub fn dispatch(bg: bg_jobs.BgJobs, payload: Payload) {
   bg_jobs.new_job(job_name, to_string(payload))
-  |> bg_jobs.enqueue_job(bg)
+  |> bg_jobs.enqueue(bg)
 }
 
 pub fn to_string(log_payload: Payload) {

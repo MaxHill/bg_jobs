@@ -31,7 +31,7 @@ pub fn handler(logger: process.Subject(test_helpers.LogMessage), job: jobs.Job) 
 
 pub fn dispatch(bg: bg_jobs.BgJobs, payload: Payload) {
   jobs.new(job_name, to_string(payload))
-  |> bg_jobs.enqueue_job(bg)
+  |> bg_jobs.enqueue(bg)
 }
 
 // Private methods

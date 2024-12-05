@@ -1,3 +1,4 @@
+import bg_jobs/jobs
 import gleam/otp/actor
 import tempo
 
@@ -9,6 +10,7 @@ pub type BgJobError {
   SetupError(actor.StartError)
   ScheduleError(String)
   UnknownError(String)
+  NoWorkerForJobError(jobs.JobEnqueueRequest, List(jobs.Worker))
   DateOutOfBoundsError(tempo.DateOutOfBoundsError)
   TimeOutOfBoundsError(tempo.TimeOutOfBoundsError)
 }

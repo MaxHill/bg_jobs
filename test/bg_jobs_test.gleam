@@ -1,5 +1,6 @@
 import bg_jobs
 import bg_jobs/db_adapter
+import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/utils
 import bg_jobs/jobs
@@ -111,10 +112,10 @@ pub fn failing_job_test() {
 
 pub fn handle_no_worker_found_test() {
   use conn <- sqlight.with_connection(":memory:")
-  use #(bg, db_adapter, logger, _event_logger) <- jobs_setup.setup(conn)
+  use #(bg, _db_adapter, logger, _event_logger) <- jobs_setup.setup(conn)
 
-  let assert Error(_) =
-    bg_jobs.enqueue_job(
+  let assert Error(errors.NoWorkerForJobError(_, _)) =
+    bg_jobs.enqueue(
       jobs.JobEnqueueRequest(
         "DOES_NOT_EXIST",
         json.to_string(json.string("payload")),
@@ -131,19 +132,6 @@ pub fn handle_no_worker_found_test() {
   // Make sure one of the jobs worked
   test_helpers.get_log(logger)
   |> should.equal(["testing"])
-
-  // Make sure the failed job is available
-  db_adapter.get_failed_jobs(1)
-  |> should.be_ok
-  |> list.first
-  |> should.be_ok
-  |> fn(job: jobs.FailedJob) {
-    job.name
-    |> should.equal("DOES_NOT_EXIST")
-
-    job.exception
-    |> should.equal("Could not enqueue job with no worker")
-  }
 }
 
 pub fn keep_going_after_panic_test() {
@@ -213,7 +201,7 @@ pub fn events_test() {
   process.sleep(200)
 
   let assert Error(_) =
-    bg_jobs.enqueue_job(
+    bg_jobs.enqueue(
       jobs.JobEnqueueRequest(
         "DOES_NOT_EXIST",
         json.to_string(json.string("payload")),
@@ -228,21 +216,20 @@ pub fn events_test() {
   |> list.sort(by: string.compare)
   |> should.equal(list.sort(
     [
-      "Event:QueuePollingStarted|queue_name:default_queue",
-      "Event:QueuePollingStarted|queue_name:second_queue",
+      "Event:JobEnqueued|job_name:FAILING_JOB",
       "Event:JobEnqueued|job_name:LOG_JOB",
+      "Event:JobFailed|queue_name:default_queue|job_name:FAILING_JOB",
+      "Event:JobReserved|queue_name:default_queue|job_name:FAILING_JOB",
       "Event:JobReserved|queue_name:default_queue|job_name:LOG_JOB",
+      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
+      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
+      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
+      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
       "Event:JobStart|queue_name:default_queue|job_name:LOG_JOB",
       "Event:JobSucceeded|queue_name:default_queue|job_name:LOG_JOB",
-      "Event:JobEnqueued|job_name:FAILING_JOB",
-      "Event:JobReserved|queue_name:default_queue|job_name:FAILING_JOB",
-      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
-      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
-      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
-      "Event:JobStart|queue_name:default_queue|job_name:FAILING_JOB",
-      "Event:JobFailed|queue_name:default_queue|job_name:FAILING_JOB",
-      "Event:QueueError|queue_name:job_dispatcher|job_name:DbError|message:No worker for job: DOES_NOT_EXIST",
-      "Event:JobFailed|queue_name:job_dispatcher|job_name:DOES_NOT_EXIST",
+      "Event:NoWorkerForJobError|name:DOES_NOT_EXIST|payload:\"payload\"",
+      "Event:QueuePollingStarted|queue_name:default_queue",
+      "Event:QueuePollingStarted|queue_name:second_queue",
     ],
     by: string.compare,
   ))
@@ -299,7 +286,7 @@ pub fn scheduled_job_test() {
 
   // Dispatch log job and make it available in the future
   let assert Ok(_) =
-    bg_jobs.enqueue_job(
+    bg_jobs.enqueue(
       jobs.JobEnqueueRequest(
         log_job.job_name,
         log_job.to_string(log_job.Payload("test")),

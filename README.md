@@ -74,7 +74,7 @@ pub fn main() {
 
   // Dispatch a new job
   jobs.new(example_worker.job_name, "Hello!"))
-  |> bg_jobs.enqueue_job(bg)
+  |> bg_jobs.enqueue(bg)
 
   process.sleep_forever()
 }

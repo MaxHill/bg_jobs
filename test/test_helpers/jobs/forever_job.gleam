@@ -17,5 +17,5 @@ pub fn handler(logger: process.Subject(test_helpers.LogMessage), _job: jobs.Job)
 
 pub fn dispatch(bg: bg_jobs.BgJobs) {
   bg_jobs.new_job(job_name, "")
-  |> bg_jobs.enqueue_job(bg)
+  |> bg_jobs.enqueue(bg)
 }

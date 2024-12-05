@@ -82,6 +82,11 @@ pub fn new_logger_event_listner(
     events.MigrateUpComplete -> "MigrateUpComplete"
     events.MonitorReleasingReserved(_) -> "MonitorReleasingReserved"
     events.MonitorReleasedJob(_) -> "MonitorReleasedJob"
+    events.NoWorkerForJobError(job_request) ->
+      "NoWorkerForJobError|name:"
+      <> job_request.name
+      <> "|payload:"
+      <> job_request.payload
   }
   |> fn(str) { "Event:" <> str }
   |> log_message(logger)
@@ -100,5 +105,10 @@ fn error_to_string(error: errors.BgJobError) {
       "DateOutOfBoundsError|message:" <> string.inspect(err)
     errors.TimeOutOfBoundsError(err) ->
       "TimeOutOfBoundsError|message" <> string.inspect(err)
+    errors.NoWorkerForJobError(job_request, workers) ->
+      "NoWorkerForJob|job_request:"
+      <> string.inspect(job_request)
+      <> "|workers:"
+      <> list.map(workers, fn(w) { w.job_name }) |> string.join(with: "")
   }
 }

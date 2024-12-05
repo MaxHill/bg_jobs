@@ -2,7 +2,6 @@ import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/dispatcher
-import bg_jobs/internal/dispatcher_messages
 import bg_jobs/internal/monitor
 import bg_jobs/internal/queue_messages
 import bg_jobs/internal/registries
@@ -31,7 +30,7 @@ import tempo/naive_datetime
 ///  |> bg_jobs.build()
 ///  
 ///  bg_jobs.new_job("example_job", "payload")
-///  |> bg_jobs.enqueue_job(bg);
+///  |> bg_jobs.enqueue(bg);
 /// ```
 pub type BgJobs {
   BgJobs(
@@ -40,6 +39,15 @@ pub type BgJobs {
     dispatcher_registry: registries.DispatcherRegistry,
     scheduled_jobs_registry: registries.ScheduledJobRegistry,
     monitor_registry: registries.MonitorRegistry,
+    enqueue_state: EnqueueState,
+  )
+}
+
+pub opaque type EnqueueState {
+  EnqueueState(
+    workers: List(jobs.Worker),
+    db_adapter: db_adapter.DbAdapter,
+    send_event: fn(events.Event) -> Nil,
   )
 }
 
@@ -291,6 +299,11 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
         dispatcher_registry:,
         scheduled_jobs_registry:,
         monitor_registry:,
+        enqueue_state: EnqueueState(
+          workers: all_workers,
+          db_adapter: spec.db_adapter,
+          send_event: events.send_event(spec.event_listeners, _),
+        ),
       ))
     }
     Error(e) -> {
@@ -413,27 +426,41 @@ pub fn job_with_available_in(job_request, availabile_in) {
 /// ```gleam
 /// let bg = bg_jobs.new() |> ... |> bg_jobs.build()
 /// bg_jobs.new_job("example_job", "payload")
-/// |> bg_jobs.enqueue_job(bg);
+/// |> bg_jobs.enqueue(bg);
 /// ```
-pub fn enqueue_job(job_request: jobs.JobEnqueueRequest, bg: BgJobs) {
-  let assert Ok(queue) = chip.find(bg.dispatcher_registry, dispatcher.name)
-  process.try_call(
-    queue,
-    dispatcher_messages.EnqueueJob(
-      _,
+pub fn enqueue(job_request: jobs.JobEnqueueRequest, bg: BgJobs) {
+  let state = bg.enqueue_state
+  use _ <- result.try(
+    list.map(state.workers, fn(job) { job.job_name })
+    |> list.find(fn(name) { name == job_request.name })
+    |> result.map_error(fn(_e) {
+      state.send_event(events.NoWorkerForJobError(job_request))
+      errors.NoWorkerForJobError(job_request, state.workers)
+    }),
+  )
+
+  let job =
+    state.db_adapter.enqueue_job(
       job_request.name,
       job_request.payload,
       available_at_from_availability(job_request.availability),
-    ),
-    1000,
-  )
-  |> result.replace_error(errors.DispatchJobError("Call error"))
-  |> result.flatten
+    )
+
+  case job {
+    Ok(job) -> {
+      state.send_event(events.JobEnqueuedEvent(job))
+      Ok(job)
+    }
+    Error(e) -> {
+      state.send_event(events.QueueErrorEvent(job_request.name, e))
+      Error(e)
+    }
+  }
 }
 
 /// Convert JobAvailability to erlang date time
 ///
-fn available_at_from_availability(availability: jobs.JobAvailability) {
+pub fn available_at_from_availability(availability: jobs.JobAvailability) {
   case availability {
     jobs.AvailableNow -> {
       naive_datetime.now_utc() |> naive_datetime.to_tuple()

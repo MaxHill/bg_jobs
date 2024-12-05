@@ -9,6 +9,7 @@ import gleam/otp/actor
 pub type Event {
   SetupErrorEvent(message: actor.StartError)
   JobEnqueuedEvent(job: jobs.Job)
+  NoWorkerForJobError(job: jobs.JobEnqueueRequest)
   JobReservedEvent(queue_name: String, job: jobs.Job)
   JobStartEvent(queue_name: String, job: jobs.Job)
   JobSucceededEvent(queue_name: String, job: jobs.Job)
