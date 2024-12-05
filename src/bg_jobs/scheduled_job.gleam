@@ -636,7 +636,7 @@ pub fn build(
     init: fn() {
       let self = process.new_subject()
 
-      let assert Ok(monitor_subject) = chip.find(monitor_registry, "monitor")
+      let assert Ok(monitor_subject) = chip.find(monitor_registry, monitor.name)
       monitor.register(monitor_subject, self)
 
       // Register the queue under a name on initialization

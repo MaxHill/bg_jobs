@@ -128,7 +128,7 @@ pub fn build(
     init: fn() {
       let self = process.new_subject()
 
-      let assert Ok(monitor_subject) = chip.find(monitor_registry, "monitor")
+      let assert Ok(monitor_subject) = chip.find(monitor_registry, monitor.name)
       monitor.register(monitor_subject, self)
       // Cleanup previously in flight jobs by this queue name
       // let assert Ok(_) = utils.remove_in_flight_jobs(spec.name, db_adapter)

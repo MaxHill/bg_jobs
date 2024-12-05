@@ -10,6 +10,8 @@ import gleam/list
 import gleam/option
 import gleam/otp/actor
 
+pub const name = "monitor"
+
 pub fn register(
   monitor: process.Subject(messages.Message),
   actor: process.Subject(_),
@@ -43,7 +45,7 @@ pub fn build(
       chip.register(
         registry,
         chip.new(self)
-          |> chip.tag("monitor"),
+          |> chip.tag(name),
       )
 
       let state =
