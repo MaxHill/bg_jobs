@@ -778,7 +778,7 @@ fn loop(message: Message, state: State) -> actor.Next(Message, State) {
 
     messages.ProcessJobs -> {
       let jobs = case
-        state.db_adapter.claim_jobs(
+        state.db_adapter.reserve_jobs(
           [state.worker.job_name],
           1,
           utils.pid_to_string(process.subject_owner(state.self)),

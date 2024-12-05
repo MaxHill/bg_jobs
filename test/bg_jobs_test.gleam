@@ -139,7 +139,7 @@ pub fn keep_going_after_panic_test() {
   let bad_adapter =
     db_adapter.DbAdapter(
       ..sqlite_db_adapter.new(conn, []),
-      claim_jobs: fn(_, _, _) { panic as "test panic" },
+      reserve_jobs: fn(_, _, _) { panic as "test panic" },
     )
   let assert Ok(_) = bad_adapter.migrate_down([])
   let assert Ok(_) = bad_adapter.migrate_up([])

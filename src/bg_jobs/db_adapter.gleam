@@ -13,11 +13,9 @@ pub type DbAdapter {
   DbAdapter(
     enqueue_job: fn(String, String, #(#(Int, Int, Int), #(Int, Int, Int))) ->
       Result(jobs.Job, errors.BgJobError),
-    // TODO: change claim -> reserve
-    claim_jobs: fn(List(String), Int, String) ->
+    reserve_jobs: fn(List(String), Int, String) ->
       Result(List(jobs.Job), errors.BgJobError),
-    // TODO: change release_claim -> release_job
-    release_claim: fn(String) -> Result(jobs.Job, errors.BgJobError),
+    release_reservation: fn(String) -> Result(jobs.Job, errors.BgJobError),
     release_jobs_reserved_by: fn(String) ->
       Result(List(jobs.Job), errors.BgJobError),
     move_job_to_succeeded: fn(jobs.Job) -> Result(Nil, errors.BgJobError),

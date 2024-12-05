@@ -243,7 +243,7 @@ fn loop(
         }
         _ -> {
           let jobs = case
-            state.db_adapter.claim_jobs(
+            state.db_adapter.reserve_jobs(
               list.map(state.workers, fn(job) { job.job_name }),
               new_jobs_limit,
               utils.pid_to_string(process.subject_owner(state.self)),

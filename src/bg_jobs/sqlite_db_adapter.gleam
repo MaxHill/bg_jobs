@@ -20,8 +20,8 @@ pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener))
   let send_event = events.send_event(event_listners, _)
   db_adapter.DbAdapter(
     enqueue_job: enqueue_job(conn, send_event),
-    claim_jobs: claim_jobs(conn, send_event),
-    release_claim: release_claim(conn, send_event),
+    reserve_jobs: reserve_jobs(conn, send_event),
+    release_reservation: release_reservation(conn, send_event),
     release_jobs_reserved_by: release_jobs_reserved_by(conn, send_event),
     move_job_to_succeeded: move_job_to_succeeded(conn, send_event),
     move_job_to_failed: move_job_to_failed(conn, send_event),
@@ -219,7 +219,7 @@ fn move_job_to_failed(
 
 /// Sets claimed_at and claimed_by and return the job to be processed.
 /// 
-fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
+fn reserve_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
     let now =
@@ -259,7 +259,10 @@ fn claim_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
 
 /// Release claim from job to allow another queue to process it
 ///
-fn release_claim(conn: sqlight.Connection, send_event: events.EventListener) {
+fn release_reservation(
+  conn: sqlight.Connection,
+  send_event: events.EventListener,
+) {
   fn(job_id: String) {
     send_event(events.DbEvent("claim_jobs", [job_id]))
     let sql =

@@ -2,71 +2,6 @@ import decode/zero
 import gleam/option.{type Option}
 import pog
 
-/// A row you get from running the `release_claim` query
-/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_claim.sql`.
-///
-/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
-/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub type ReleaseClaimRow {
-  ReleaseClaimRow(
-    id: String,
-    name: String,
-    payload: String,
-    attempts: Int,
-    created_at: pog.Timestamp,
-    available_at: pog.Timestamp,
-    reserved_at: Option(pog.Timestamp),
-    reserved_by: Option(String),
-  )
-}
-
-/// Runs the `release_claim` query
-/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_claim.sql`.
-///
-/// > 🐿️ This function was generated automatically using v2.0.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn release_claim(db, arg_1) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use created_at <- zero.field(4, timestamp_decoder())
-    use available_at <- zero.field(5, timestamp_decoder())
-    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
-    use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(ReleaseClaimRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
-  }
-
-  let query =
-    "UPDATE
-    jobs
-SET
-    reserved_at = NULL,
-    reserved_by = NULL
-WHERE
-    id = $1
-RETURNING
-    *;
-"
-
-  pog.query(query)
-  |> pog.parameter(pog.text(arg_1))
-  |> pog.returning(zero.run(_, decoder))
-  |> pog.execute(db)
-}
-
 /// A row you get from running the `insert_succeeded_job` query
 /// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/insert_succeeded_job.sql`.
 ///
@@ -91,8 +26,10 @@ pub type InsertSucceededJobRow {
 /// > 🐿️ This function was generated automatically using v2.0.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7) {
-  let decoder = {
+pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7,
+) {
+  let decoder =
+  {
     use id <- zero.field(0, zero.string)
     use name <- zero.field(1, zero.string)
     use payload <- zero.field(2, zero.string)
@@ -100,19 +37,21 @@ pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7)
     use created_at <- zero.field(4, timestamp_decoder())
     use available_at <- zero.field(5, timestamp_decoder())
     use succeeded_at <- zero.field(6, timestamp_decoder())
-    zero.success(InsertSucceededJobRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      succeeded_at:,
-    ))
+    zero.success(
+      InsertSucceededJobRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        succeeded_at:,
+      ),
+    )
   }
 
   let query =
-    "INSERT INTO
+  "INSERT INTO
     jobs_succeeded (
         id,
         name,
@@ -175,20 +114,21 @@ pub fn get_failed_jobs(db, arg_1) {
     use created_at <- zero.field(5, timestamp_decoder())
     use available_at <- zero.field(6, timestamp_decoder())
     use failed_at <- zero.field(7, timestamp_decoder())
-    zero.success(GetFailedJobsRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      exception:,
-      created_at:,
-      available_at:,
-      failed_at:,
-    ))
+    zero.success(
+      GetFailedJobsRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        exception:,
+        created_at:,
+        available_at:,
+        failed_at:,
+      ),
+    )
   }
 
-  let query =
-    "SELECT
+  let query = "SELECT
     *
 FROM
     jobs_failed
@@ -211,8 +151,7 @@ LIMIT
 pub fn delete_enqueued_job(db, arg_1) {
   let decoder = zero.map(zero.dynamic, fn(_) { Nil })
 
-  let query =
-    "DELETE FROM
+  let query = "DELETE FROM
     jobs
 WHERE
     id = $1;
@@ -259,20 +198,21 @@ pub fn get_running_jobs_by_queue_name(db, arg_1) {
     use available_at <- zero.field(5, timestamp_decoder())
     use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
     use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(GetRunningJobsByQueueNameRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
+    zero.success(
+      GetRunningJobsByQueueNameRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
   }
 
-  let query =
-    "SELECT
+  let query = "SELECT
     *
 FROM
     jobs
@@ -320,19 +260,20 @@ pub fn get_succeeded_jobs(db, arg_1) {
     use created_at <- zero.field(4, timestamp_decoder())
     use available_at <- zero.field(5, timestamp_decoder())
     use succeeded_at <- zero.field(6, timestamp_decoder())
-    zero.success(GetSucceededJobsRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      succeeded_at:,
-    ))
+    zero.success(
+      GetSucceededJobsRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        succeeded_at:,
+      ),
+    )
   }
 
-  let query =
-    "SELECT
+  let query = "SELECT
     *
 FROM
     jobs_succeeded
@@ -381,20 +322,21 @@ pub fn increment_attempts(db, arg_1) {
     use available_at <- zero.field(5, timestamp_decoder())
     use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
     use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(IncrementAttemptsRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
+    zero.success(
+      IncrementAttemptsRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
   }
 
-  let query =
-    "UPDATE
+  let query = "UPDATE
     jobs
 SET
     attempts = attempts + 1
@@ -446,7 +388,8 @@ pub fn insert_failed_job(
   arg_7,
   arg_8,
 ) {
-  let decoder = {
+  let decoder =
+  {
     use id <- zero.field(0, zero.string)
     use name <- zero.field(1, zero.string)
     use payload <- zero.field(2, zero.string)
@@ -455,20 +398,22 @@ pub fn insert_failed_job(
     use created_at <- zero.field(5, timestamp_decoder())
     use available_at <- zero.field(6, timestamp_decoder())
     use failed_at <- zero.field(7, timestamp_decoder())
-    zero.success(InsertFailedJobRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      exception:,
-      created_at:,
-      available_at:,
-      failed_at:,
-    ))
+    zero.success(
+      InsertFailedJobRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        exception:,
+        created_at:,
+        available_at:,
+        failed_at:,
+      ),
+    )
   }
 
   let query =
-    "INSERT INTO
+  "INSERT INTO
     jobs_failed (
         id,
         name,
@@ -533,20 +478,21 @@ pub fn enqueue_job(db, arg_1, arg_2, arg_3, arg_4, arg_5) {
     use available_at <- zero.field(5, timestamp_decoder())
     use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
     use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(EnqueueJobRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
+    zero.success(
+      EnqueueJobRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
   }
 
-  let query =
-    "INSERT INTO
+  let query = "INSERT INTO
     jobs (
         id,
         name,
@@ -606,20 +552,21 @@ pub fn release_jobs_reserved_by(db, arg_1) {
     use available_at <- zero.field(5, timestamp_decoder())
     use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
     use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(ReleaseJobsReservedByRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
+    zero.success(
+      ReleaseJobsReservedByRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
   }
 
-  let query =
-    "UPDATE
+  let query = "UPDATE
     jobs
 SET
     reserved_at = NULL,
@@ -671,26 +618,93 @@ pub fn get_enqueued_jobs(db, arg_1) {
     use available_at <- zero.field(5, timestamp_decoder())
     use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
     use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(GetEnqueuedJobsRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
+    zero.success(
+      GetEnqueuedJobsRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
   }
 
-  let query =
-    "SELECT
+  let query = "SELECT
     *
 FROM
     jobs
 WHERE
     name = $1
     AND reserved_at IS NULL
+"
+
+  pog.query(query)
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(zero.run(_, decoder))
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `release_reservation` query
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_reservation.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v2.0.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type ReleaseReservationRow {
+  ReleaseReservationRow(
+    id: String,
+    name: String,
+    payload: String,
+    attempts: Int,
+    created_at: pog.Timestamp,
+    available_at: pog.Timestamp,
+    reserved_at: Option(pog.Timestamp),
+    reserved_by: Option(String),
+  )
+}
+
+/// Runs the `release_reservation` query
+/// defined in `./src/bg_jobs/internal/postgres_db_adapter/sql/release_reservation.sql`.
+///
+/// > 🐿️ This function was generated automatically using v2.0.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn release_reservation(db, arg_1) {
+  let decoder = {
+    use id <- zero.field(0, zero.string)
+    use name <- zero.field(1, zero.string)
+    use payload <- zero.field(2, zero.string)
+    use attempts <- zero.field(3, zero.int)
+    use created_at <- zero.field(4, timestamp_decoder())
+    use available_at <- zero.field(5, timestamp_decoder())
+    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
+    use reserved_by <- zero.field(7, zero.optional(zero.string))
+    zero.success(
+      ReleaseReservationRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
+  }
+
+  let query = "UPDATE
+    jobs
+SET
+    reserved_at = NULL,
+    reserved_by = NULL
+WHERE
+    id = $1
+RETURNING
+    *;
 "
 
   pog.query(query)
@@ -734,20 +748,21 @@ pub fn get_running_jobs(db) {
     use available_at <- zero.field(5, timestamp_decoder())
     use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
     use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(GetRunningJobsRow(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
+    zero.success(
+      GetRunningJobsRow(
+        id:,
+        name:,
+        payload:,
+        attempts:,
+        created_at:,
+        available_at:,
+        reserved_at:,
+        reserved_by:,
+      ),
+    )
   }
 
-  let query =
-    "SELECT
+  let query = "SELECT
     *
 FROM
     jobs

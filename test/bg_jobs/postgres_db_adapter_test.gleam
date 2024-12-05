@@ -100,17 +100,17 @@ pub fn claim_jobs_limit_test() {
     |> pog.execute(conn)
 
   count |> should.equal(2)
-  job_store.claim_jobs([job_name], 1, "default_queue")
+  job_store.reserve_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.claim_jobs([job_name], 1, "default_queue")
+  job_store.reserve_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(1)
 
-  job_store.claim_jobs([job_name], 1, "default_queue")
+  job_store.reserve_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.length
   |> should.equal(0)
@@ -127,7 +127,7 @@ pub fn claim_jobs_returned_test() {
       naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
-  job_store.claim_jobs([job_name], 1, "default_queue")
+  job_store.reserve_jobs([job_name], 1, "default_queue")
   |> should.be_ok
   |> list.first
   |> should.be_ok
@@ -388,7 +388,7 @@ pub fn empty_list_of_jobs_test() {
   let conn = new_db()
   let job_store = postgres_db_adapter.new(conn, [fn(_) { Nil }])
 
-  job_store.claim_jobs(["job_name"], 3, "default_queue")
+  job_store.reserve_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
@@ -421,7 +421,7 @@ pub fn multiple_list_of_jobs_test() {
       naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
-  job_store.claim_jobs(["job_name"], 3, "default_queue")
+  job_store.reserve_jobs(["job_name"], 3, "default_queue")
   |> should.be_ok
 }
 
@@ -447,7 +447,7 @@ pub fn db_events_test() {
     )
 
   let job_1 =
-    job_store.claim_jobs(["test_job_1"], 1, "default_queue")
+    job_store.reserve_jobs(["test_job_1"], 1, "default_queue")
     |> should.be_ok
     |> list.first
     |> should.be_ok
@@ -458,7 +458,7 @@ pub fn db_events_test() {
   let assert Ok(_) = job_store.get_succeeded_jobs(1)
 
   let job_2 =
-    job_store.claim_jobs(["test_job_2"], 1, "default_queue")
+    job_store.reserve_jobs(["test_job_2"], 1, "default_queue")
     |> should.be_ok
     |> list.first
     |> should.be_ok
@@ -498,12 +498,12 @@ pub fn release_claim_test() {
     |> pog.parameter(pog.text("default_queue"))
     |> pog.execute(conn)
 
-  job_store.release_claim("test_id")
+  job_store.release_reservation("test_id")
   |> should.be_ok
 
   process.sleep(100)
 
-  job_store.claim_jobs(["test_job"], 1, "default_queue")
+  job_store.reserve_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok()
   |> list.first
   |> should.be_ok
@@ -528,14 +528,14 @@ pub fn scheduled_job_test() {
 
   process.sleep(200)
 
-  job_store.claim_jobs(["test_job"], 1, "default_queue")
+  job_store.reserve_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok
   |> should.equal([])
 
   // Wait for it to become available
   process.sleep(2000)
 
-  job_store.claim_jobs(["test_job"], 1, "default_queue")
+  job_store.reserve_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok
   |> list.map(fn(job) { job.name })
   |> should.equal(["test_job"])
