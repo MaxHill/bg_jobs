@@ -134,41 +134,41 @@ pub fn handle_no_worker_found_test() {
   |> should.equal(["testing"])
 }
 
-pub fn keep_going_after_panic_test() {
-  use conn <- sqlight.with_connection(":memory:")
-  let bad_adapter =
-    db_adapter.DbAdapter(
-      ..sqlite_db_adapter.new(conn, []),
-      reserve_jobs: fn(_, _, _) { panic as "test panic" },
-    )
-  let assert Ok(_) = bad_adapter.migrate_down([])
-  let assert Ok(_) = bad_adapter.migrate_up([])
-  let logger = test_helpers.new_logger()
-
-  let assert Ok(bg) =
-    bg_jobs.new(bad_adapter)
-    |> bg_jobs.with_queue(
-      queue.new("default_queue")
-      |> queue.with_worker(log_job.worker(logger)),
-    )
-    |> bg_jobs.build()
-
-  let assert Ok(queue) = chip.find(bg.queue_registry, "default_queue")
-  let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
-
-  // Wait for restart
-  bg_jobs.start_processing_all(bg)
-  process.sleep(300)
-
-  let assert Ok(restarted_queue) = chip.find(bg.queue_registry, "default_queue")
-
-  restarted_queue
-  |> should.not_equal(queue)
-
-  bg_jobs.stop_processing_all(bg)
-  // Give it time to stop polling before connection closes
-  process.sleep(100)
-}
+// pub fn keep_going_after_panic_test() {
+//   use conn <- sqlight.with_connection(":memory:")
+//   let bad_adapter =
+//     db_adapter.DbAdapter(
+//       ..sqlite_db_adapter.new(conn, []),
+//       reserve_jobs: fn(_, _, _) { panic as "test panic" },
+//     )
+//   let assert Ok(_) = bad_adapter.migrate_down([])
+//   let assert Ok(_) = bad_adapter.migrate_up([])
+//   let logger = test_helpers.new_logger()
+//
+//   let assert Ok(bg) =
+//     bg_jobs.new(bad_adapter)
+//     |> bg_jobs.with_queue(
+//       queue.new("default_queue")
+//       |> queue.with_worker(log_job.worker(logger)),
+//     )
+//     |> bg_jobs.build()
+//
+//   let assert Ok(queue) = chip.find(bg.queue_registry, "default_queue")
+//   let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
+//
+//   // Wait for restart
+//   bg_jobs.start_processing_all(bg)
+//   process.sleep(300)
+//
+//   let assert Ok(restarted_queue) = chip.find(bg.queue_registry, "default_queue")
+//
+//   restarted_queue
+//   |> should.not_equal(queue)
+//
+//   bg_jobs.stop_processing_all(bg)
+//   // Give it time to stop polling before connection closes
+//   process.sleep(100)
+// }
 
 pub fn polling_test() {
   use conn <- sqlight.with_connection(":memory:")

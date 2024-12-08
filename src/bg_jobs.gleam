@@ -111,8 +111,8 @@ pub fn new(db_adapter: db_adapter.DbAdapter) {
   BgJobsSupervisorSpec(
     db_adapter: db_adapter,
     event_listeners: [],
-    frequency_period: 1,
     max_frequency: 5,
+    frequency_period: 1,
     queues: [],
     scheduled_jobs: [],
   )

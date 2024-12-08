@@ -1,9 +1,12 @@
 import bg_jobs
 import bg_jobs/db_adapter
+import bg_jobs/internal/monitor
 import bg_jobs/queue
 import bg_jobs/scheduled_job
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
+import gleam/io
+import gleam/list
 import sqlight
 import test_helpers
 import test_helpers/jobs/failing_job
@@ -45,6 +48,10 @@ pub fn setup(
 
   let assert Ok(bg) =
     bg_jobs.new(db_adapter)
+    // Max 100 restarts..
+    |> bg_jobs.with_supervisor_max_frequency(100)
+    // .. in 1 second
+    |> bg_jobs.with_supervisor_frequency_period(1)
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_queue(
       queue("default_queue")
@@ -60,7 +67,7 @@ pub fn setup(
   f(#(bg, db_adapter, logger, event_logger))
 
   // Post test cleanup
-  bg_jobs.stop_processing_all(bg)
+  test_helpers.cleanup_processes(bg)
   // Give it time to stop polling before connection closes
   process.sleep(100)
 }
@@ -126,7 +133,7 @@ pub fn setup_interval(
   f(#(bg, db_adapter, logger, event_logger))
 
   // Post test cleanup
-  bg_jobs.stop_processing_all(bg)
+  test_helpers.cleanup_processes(bg)
   // Give it time to stop polling before connection closes
   process.sleep(100)
 }
@@ -155,7 +162,7 @@ pub fn setup_schedule(
   f(#(bg, db_adapter, event_logger))
 
   // Post test cleanup
-  bg_jobs.stop_processing_all(bg)
+  test_helpers.cleanup_processes(bg)
   // Give it time to stop polling before connection closes
   process.sleep(100)
 }

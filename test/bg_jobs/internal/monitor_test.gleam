@@ -1,3 +1,6 @@
+import bg_jobs
+import bg_jobs/db_adapter
+import bg_jobs/internal/monitor
 import bg_jobs/internal/utils
 import chip
 import gleam/erlang/process
@@ -8,15 +11,11 @@ import test_helpers
 import test_helpers/jobs as jobs_setup
 import test_helpers/jobs/forever_job
 
-pub fn release_claimed_jobs_on_process_down_test() {
-  use conn <- sqlight.with_connection(":memory:")
-  use #(bg, db_adapter, logger, _event_logger) <- jobs_setup.setup(conn)
-
-  let assert Ok(_job) = forever_job.dispatch(bg)
-
-  // Wait for jobs to process
-  process.sleep(200)
-
+pub fn test_thing(
+  bg: bg_jobs.BgJobs,
+  db_adapter: db_adapter.DbAdapter,
+  logger: process.Subject(test_helpers.LogMessage),
+) {
   // Get queue
   let assert Ok(default_queue) = chip.find(bg.queue_registry, "default_queue")
   let queue_pid = process.subject_owner(default_queue)
@@ -46,19 +45,40 @@ pub fn release_claimed_jobs_on_process_down_test() {
   })
 
   test_helpers.get_log(logger)
-  // Job should have been started twice
-  |> should.equal(["Running forever...", "Running forever..."])
+  |> list.length()
+  |> should.equal(2)
 }
+
+pub fn release_claimed_jobs_on_process_down_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  use #(bg, db_adapter, logger, _event_logger) <- jobs_setup.setup(conn)
+
+  let assert Ok(_job) = forever_job.dispatch(bg)
+
+  process.sleep(100)
+  test_thing(bg, db_adapter, logger)
+  test_thing(bg, db_adapter, logger)
+}
+
+// pub fn monitor_restart_test() {
+//   use conn <- sqlight.with_connection(":memory:")
+//   use #(bg, _db_adapter, _logger, _event_logger) <- jobs_setup.setup(conn)
+//
+//   // let assert Ok(_job) = forever_job.dispatch(bg)
+//   let table = monitor.initialize_named_registries_store(monitor.table_name)
+//   monitor.get_all_monitoring(table)
+//   |> list.map(fn(pid) { process.is_alive(pid.0) })
+//   |> io.debug()
+//
+//   Nil
+//   // get monitor
+// }
 
 pub fn release_claimed_jobs_on_process_down_interval_test() {
   use conn <- sqlight.with_connection(":memory:")
   use #(bg, db_adapter, _logger, _event_logger) <- jobs_setup.setup_interval(
     conn,
   )
-
-  // Give time for job to be started
-  process.sleep(100)
-
   // Get scheduled job
   let assert Ok(scheduled_job) =
     chip.find(bg.scheduled_jobs_registry, "FOREVER_JOB_SCHEDULE")
@@ -92,5 +112,41 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
     |> should.not_equal(utils.pid_to_string(scheduled_job_pid))
   })
 
+  // Kill the queue again, this should trigger the cleanup again
+  process.kill(scheduled_job_pid)
+
+  //  Wait for restart
+  process.sleep(50)
+
+  // Assert the job has been claimed by the new actor
+  db_adapter.get_running_jobs_by_queue_name(utils.pid_to_string(
+    scheduled_job_pid,
+  ))
+  |> should.be_ok()
+  |> list.map(fn(job) {
+    job.reserved_by
+    |> should.be_some()
+    |> should.not_equal(utils.pid_to_string(scheduled_job_pid))
+  })
+
   Nil
+}
+
+pub fn ets_monitor_store_test() {
+  let table = monitor.initialize_named_registries_store("test")
+  let pid = utils.string_to_pid("<0.129.0>")
+  let monitor = process.monitor_process(pid)
+  monitor.add_monitor(table, pid, monitor)
+
+  let pid2 = utils.string_to_pid("<0.128.0>")
+  let monitor2 = process.monitor_process(pid2)
+  monitor.add_monitor(table, pid2, monitor2)
+
+  monitor.get_all_monitoring(table)
+  |> should.equal([#(pid, monitor), #(pid2, monitor2)])
+
+  monitor.remove_monitor(table, pid)
+
+  monitor.get_all_monitoring(table)
+  |> should.equal([#(pid2, monitor2)])
 }

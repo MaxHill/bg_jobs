@@ -1,5 +1,7 @@
+import bg_jobs
 import bg_jobs/errors
 import bg_jobs/events
+import bg_jobs/internal/monitor
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
 import gleam/list
@@ -10,6 +12,25 @@ import sqlight
 pub fn reset_db(connection: sqlight.Connection) {
   let assert Ok(_) = sqlite_db_adapter.migrate_down(connection)([])
   let assert Ok(_) = sqlite_db_adapter.migrate_up(connection)([])
+}
+
+// Cleanup otp
+//---------------
+pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
+  // Kill the supervisor
+  let pid =
+    bg.supervisor
+    |> process.subject_owner()
+  process.unlink(pid)
+  process.kill(pid)
+
+  // Kill all monitored processes
+  monitor.initialize_named_registries_store(monitor.table_name)
+  |> monitor.get_all_monitoring()
+  |> list.each(fn(m) {
+    process.unlink(m.0)
+    process.kill(m.0)
+  })
 }
 
 // Test Logger
