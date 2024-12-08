@@ -19,12 +19,18 @@ pub const name = "monitor"
 
 pub const table_name = "monitor_ets_table"
 
-pub fn register(
+pub fn register_queue(
   monitor: process.Subject(messages.Message),
-  actor: process.Subject(_),
+  subject: process.Subject(queue_messages.Message),
 ) {
-  let pid = process.subject_owner(actor)
-  actor.send(monitor, messages.Register(pid))
+  actor.send(monitor, messages.RegisterQueue(subject))
+}
+
+pub fn register_scheduled_job(
+  monitor: process.Subject(messages.Message),
+  subject: process.Subject(scheduled_jobs_messages.Message),
+) {
+  actor.send(monitor, messages.RegisterScheduledJob(subject))
 }
 
 pub type State {
@@ -79,13 +85,27 @@ fn loop(
 ) -> actor.Next(messages.Message, State) {
   case message {
     messages.Shutdown -> actor.Stop(process.Normal)
-    messages.Register(pid) -> {
-      add_monitor(state.monitoring, pid, process.monitor_process(pid))
-
-      // Update selector 
-      let selector = update_subject(state)
-
-      actor.Continue(state, option.Some(selector))
+    messages.RegisterQueue(subject) -> {
+      let pid = process.subject_owner(subject)
+      register(
+        state,
+        MonitorQueue(
+          pid:,
+          process_monitor: process.monitor_process(pid),
+          subject:,
+        ),
+      )
+    }
+    messages.RegisterScheduledJob(subject) -> {
+      let pid = process.subject_owner(subject)
+      register(
+        state,
+        MonitorScheduledJob(
+          pid:,
+          process_monitor: process.monitor_process(pid),
+          subject:,
+        ),
+      )
     }
     messages.Down(d) -> {
       state.send_event(events.MonitorReleasingReserved(d.pid))
@@ -139,20 +159,41 @@ fn update_subject(state: State) {
   |> fn(sel) {
     get_all_monitoring(state.monitoring)
     |> list.fold(sel, fn(sel, mon) {
-      process.selecting_process_down(sel, mon.1, messages.Down)
+      process.selecting_process_down(
+        sel,
+        { mon.1 }.process_monitor,
+        messages.Down,
+      )
     })
   }
+}
+
+fn register(state: State, value: MonitorTableValue) {
+  add_monitor(state.monitoring, value.pid, value)
+
+  // Update selector 
+  let selector = update_subject(state)
+
+  actor.Continue(state, option.Some(selector))
 }
 
 // Ets store
 //---------------
 
+// @internal
+// pub fn insert_monitor(
+//   table: MonitorTable,
+//   pid: process.Pid,
+//   value: MonitorTableValue,
+// ) -> Nil {
+//   lamb.insert(table, pid, value)
+// }
 @internal
 pub fn add_monitor(
   table: MonitorTable,
   pid: process.Pid,
-  monitor: process.ProcessMonitor,
-) -> Nil {
+  monitor: MonitorTableValue,
+) {
   lamb.insert(table, pid, monitor)
 }
 
@@ -164,7 +205,7 @@ pub fn remove_monitor(table: MonitorTable, pid: process.Pid) -> Int {
 @internal
 pub fn get_all_monitoring(
   table: MonitorTable,
-) -> List(#(process.Pid, process.ProcessMonitor)) {
+) -> List(#(process.Pid, MonitorTableValue)) {
   lamb.search(table, query.new())
 }
 
@@ -172,12 +213,12 @@ pub fn get_all_monitoring(
 pub fn get_by_pid(
   table: MonitorTable,
   pid: process.Pid,
-) -> List(#(process.Pid, process.ProcessMonitor)) {
+) -> List(#(process.Pid, MonitorTableValue)) {
   lamb.search(table, query.new() |> query.index(pid))
 }
 
 pub type MonitorTable =
-  lamb.Table(process.Pid, process.ProcessMonitor)
+  lamb.Table(process.Pid, MonitorTableValue)
 
 pub type MonitorTableValue {
   MonitorQueue(

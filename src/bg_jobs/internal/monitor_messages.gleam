@@ -1,3 +1,5 @@
+import bg_jobs/internal/queue_messages
+import bg_jobs/internal/scheduled_jobs_messages
 import gleam/erlang/process
 
 // Monitor
@@ -8,7 +10,8 @@ pub type Message {
   ///
   /// Allows monitor to start tracking the actor,
   /// enabling lifecycle management and job reservation tracking.
-  Register(process.Pid)
+  RegisterQueue(process.Subject(queue_messages.Message))
+  RegisterScheduledJob(process.Subject(scheduled_jobs_messages.Message))
   /// Handle the termination of a monitored actor process.
   ///
   /// Triggers cleanup operations for jobs associated with the 

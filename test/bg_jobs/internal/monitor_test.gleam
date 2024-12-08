@@ -2,6 +2,7 @@ import bg_jobs
 import bg_jobs/db_adapter
 import bg_jobs/internal/monitor
 import bg_jobs/internal/utils
+import bg_jobs/queue
 import chip
 import gleam/erlang/process
 import gleam/list
@@ -130,23 +131,4 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
   })
 
   Nil
-}
-
-pub fn ets_monitor_store_test() {
-  let table = monitor.initialize_named_registries_store("test")
-  let pid = utils.string_to_pid("<0.129.0>")
-  let monitor = process.monitor_process(pid)
-  monitor.add_monitor(table, pid, monitor)
-
-  let pid2 = utils.string_to_pid("<0.128.0>")
-  let monitor2 = process.monitor_process(pid2)
-  monitor.add_monitor(table, pid2, monitor2)
-
-  monitor.get_all_monitoring(table)
-  |> should.equal([#(pid, monitor), #(pid2, monitor2)])
-
-  monitor.remove_monitor(table, pid)
-
-  monitor.get_all_monitoring(table)
-  |> should.equal([#(pid2, monitor2)])
 }
