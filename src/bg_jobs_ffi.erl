@@ -16,3 +16,5 @@ pid_to_binary(Pid) when is_pid(Pid) ->
 %% Converts a binary back to a pid
 binary_to_pid(PidBinary) when is_binary(PidBinary) ->
     erlang:list_to_pid(binary_to_list(PidBinary)).
+
+

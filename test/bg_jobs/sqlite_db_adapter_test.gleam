@@ -485,7 +485,6 @@ pub fn release_claim_test() {
   let assert Ok(_) = job_store.migrate_down([])
   let assert Ok(_) = job_store.migrate_up([])
 
-  // TODO: replace CURRENT_TIMESTAMP
   let assert Ok(_) =
     sqlight.query(
       "INSERT INTO jobs (id, name, payload, attempts, created_at, available_at, reserved_at, reserved_by)

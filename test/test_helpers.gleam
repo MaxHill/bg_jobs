@@ -17,15 +17,37 @@ pub fn reset_db(connection: sqlight.Connection) {
   let assert Ok(_) = sqlite_db_adapter.migrate_up(connection)([])
 }
 
+// Set log level
+//---------------
+pub type LogLevel {
+  Emergency
+  Alert
+  Critical
+  Error
+  Warning
+  Notice
+  Info
+  Debug
+}
+
+pub type Log {
+  Level
+}
+
+@external(erlang, "logger", "set_primary_config")
+fn set_logger_level_ffi(log: Log, level: LogLevel) -> Nil
+
+pub fn set_logger_level(level: LogLevel) {
+  set_logger_level_ffi(Level, level)
+}
+
 // Cleanup otp
 //---------------
 pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
   // Kill the supervisor
-  let pid =
-    bg.supervisor
-    |> process.subject_owner()
-  process.unlink(pid)
-  process.kill(pid)
+  process.send_exit(bg.supervisor)
+  process.unlink(bg.supervisor)
+  process.kill(bg.supervisor)
 
   // Kill all monitored processes
   monitor.initialize_named_registries_store(monitor.table_name)
@@ -39,7 +61,6 @@ pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
       monitor.MonitorMonitor(_, _, subject) ->
         process.send(subject, monitor_messages.Shutdown)
     }
-
     process.unlink({ m.1 }.pid)
     process.kill({ m.1 }.pid)
   })

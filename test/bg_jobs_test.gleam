@@ -18,6 +18,7 @@ import test_helpers/jobs/failing_job
 import test_helpers/jobs/log_job
 
 pub fn main() {
+  test_helpers.set_logger_level(test_helpers.Critical)
   gleeunit.main()
 }
 

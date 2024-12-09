@@ -6,6 +6,7 @@ import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/internal/utils
 import gleam/erlang/process
 import gleam/function
+import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -48,6 +49,7 @@ pub fn build(
 ) -> Result(process.Subject(messages.Message), actor.StartError) {
   actor.start_spec(actor.Spec(
     init: fn() {
+      io.debug("starting monitor")
       let self = process.new_subject()
       let table = initialize_named_registries_store(table_name)
 

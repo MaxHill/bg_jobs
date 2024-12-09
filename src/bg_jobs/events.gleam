@@ -1,13 +1,13 @@
 import bg_jobs/errors
 import bg_jobs/jobs
+import gleam/dynamic
 import gleam/erlang/process
 import gleam/list
-import gleam/otp/actor
 
 // Event
 //---------------
 pub type Event {
-  SetupErrorEvent(message: actor.StartError)
+  SetupErrorEvent(error: dynamic.Dynamic)
   JobEnqueuedEvent(job: jobs.Job)
   NoWorkerForJobError(job: jobs.JobEnqueueRequest)
   JobReservedEvent(queue_name: String, job: jobs.Job)

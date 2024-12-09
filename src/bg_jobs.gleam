@@ -7,7 +7,7 @@ import bg_jobs/queue
 import bg_jobs/scheduled_job
 import gleam/erlang/process
 import gleam/list
-import gleam/otp/supervisor
+import gleam/otp/static_supervisor as sup
 import gleam/result
 import tempo/duration
 import tempo/naive_datetime
@@ -26,10 +26,7 @@ import tempo/naive_datetime
 ///  |> bg_jobs.enqueue(bg);
 /// ```
 pub type BgJobs {
-  BgJobs(
-    supervisor: process.Subject(supervisor.Message),
-    enqueue_state: EnqueueState,
-  )
+  BgJobs(supervisor: process.Pid, enqueue_state: EnqueueState)
 }
 
 pub opaque type EnqueueState {
@@ -171,9 +168,84 @@ pub fn with_scheduled_job(
 ///  |> bg_jobs.build()
 ///
 /// ````
-pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
-  let self = process.new_subject()
+// pub fn build_old(
+//   spec: BgJobsSupervisorSpec,
+// ) -> Result(BgJobs, errors.BgJobError) {
+//   let self = process.new_subject()
+//
+//   let all_workers =
+//     spec.queues
+//     |> list.map(fn(spec) { spec.workers })
+//     |> list.flatten
+//     |> list.append(
+//       spec.scheduled_jobs
+//       |> list.map(fn(spec) { spec.worker }),
+//     )
+//
+//   supervisor.start_spec(
+//     supervisor.Spec(
+//       argument: self,
+//       max_frequency: spec.max_frequency,
+//       frequency_period: spec.max_frequency,
+//       init: fn(children) {
+//         children
+//         // Add monitor
+//         |> supervisor.add(
+//           supervisor.worker(fn(_) { monitor.build(db_adapter: spec.db_adapter) }),
+//         )
+//         // Add the queues
+//         |> fn(children) {
+//           spec.queues
+//           |> list.map(fn(queue_spec) {
+//             supervisor.worker(fn(_) {
+//               queue_spec
+//               |> queue.with_event_listeners(spec.event_listeners)
+//               |> queue.build(db_adapter: spec.db_adapter, spec: _)
+//             })
+//           })
+//           |> list.fold(children, supervisor.add)
+//         }
+//         // Add the scheduled_jobs
+//         |> fn(children) {
+//           spec.scheduled_jobs
+//           |> list.map(fn(scheduled_jobs_spec) {
+//             supervisor.worker(fn(_) {
+//               scheduled_jobs_spec
+//               |> scheduled_job.with_event_listeners(spec.event_listeners)
+//               |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
+//             })
+//           })
+//           |> list.fold(children, supervisor.add)
+//         }
+//       },
+//     ),
+//   )
+//   |> result.map(fn(supervisor) {
+//     BgJobs(
+//       supervisor:,
+//       enqueue_state: EnqueueState(
+//         workers: all_workers,
+//         db_adapter: spec.db_adapter,
+//         send_event: events.send_event(spec.event_listeners, _),
+//       ),
+//     )
+//   })
+//   |> result.map_error(fn(e) {
+//     events.send_event(spec.event_listeners, events.SetupErrorEvent(e))
+//     errors.SetupError(e)
+//   })
+// }
 
+/// Create the supervisor and all it's queues based on the provided spec
+///
+/// ## Example
+/// ```gleam
+///  let bg = bg_jobs.new(db_adapter)
+///  ...
+///  |> bg_jobs.build()
+///
+/// ````
+pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
   let all_workers =
     spec.queues
     |> list.map(fn(spec) { spec.workers })
@@ -183,44 +255,43 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
       |> list.map(fn(spec) { spec.worker }),
     )
 
-  supervisor.start_spec(
-    supervisor.Spec(
-      argument: self,
-      max_frequency: spec.max_frequency,
-      frequency_period: spec.max_frequency,
-      init: fn(children) {
-        children
-        // Add monitor
-        |> supervisor.add(
-          supervisor.worker(fn(_) { monitor.build(db_adapter: spec.db_adapter) }),
-        )
-        // Add the queues
-        |> fn(children) {
-          spec.queues
-          |> list.map(fn(queue_spec) {
-            supervisor.worker(fn(_) {
-              queue_spec
-              |> queue.with_event_listeners(spec.event_listeners)
-              |> queue.build(db_adapter: spec.db_adapter, spec: _)
-            })
-          })
-          |> list.fold(children, supervisor.add)
-        }
-        // Add the scheduled_jobs
-        |> fn(children) {
-          spec.scheduled_jobs
-          |> list.map(fn(scheduled_jobs_spec) {
-            supervisor.worker(fn(_) {
-              scheduled_jobs_spec
-              |> scheduled_job.with_event_listeners(spec.event_listeners)
-              |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
-            })
-          })
-          |> list.fold(children, supervisor.add)
-        }
-      },
-    ),
+  sup.new(sup.OneForOne)
+  // max [intensity] restart fails within [period] seconds
+  |> sup.restart_tolerance(intensity: 5, period: 1)
+  // Add monitor
+  |> sup.add(
+    sup.worker_child("monitor", fn() {
+      monitor.build(db_adapter: spec.db_adapter)
+      |> result.map(process.subject_owner)
+    }),
   )
+  // Add queues
+  |> fn(sub_builder) {
+    spec.queues
+    |> list.map(fn(queue_spec) {
+      sup.worker_child(queue_spec.name, fn() {
+        queue_spec
+        |> queue.with_event_listeners(spec.event_listeners)
+        |> queue.build(db_adapter: spec.db_adapter, spec: _)
+        |> result.map(process.subject_owner)
+      })
+    })
+    |> list.fold(sub_builder, sup.add)
+  }
+  // Add scheduled_jobs
+  |> fn(sub_builder) {
+    spec.scheduled_jobs
+    |> list.map(fn(scheduled_jobs_spec) {
+      sup.worker_child(scheduled_jobs_spec.worker.job_name, fn() {
+        scheduled_jobs_spec
+        |> scheduled_job.with_event_listeners(spec.event_listeners)
+        |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
+        |> result.map(process.subject_owner)
+      })
+    })
+    |> list.fold(sub_builder, sup.add)
+  }
+  |> sup.start_link()
   |> result.map(fn(supervisor) {
     BgJobs(
       supervisor:,
