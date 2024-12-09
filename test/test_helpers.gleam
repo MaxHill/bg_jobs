@@ -33,11 +33,11 @@ pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
   |> monitor.get_all_monitoring()
   |> list.each(fn(m) {
     case m.1 {
-      monitor.MonitorQueue(_, subject, _, _) ->
+      monitor.MonitorQueue(_, _, subject, _) ->
         process.send(subject, queue_messages.Shutdown)
-      monitor.MonitorScheduledJob(_, subject, _, _) ->
+      monitor.MonitorScheduledJob(_, _, subject, _) ->
         process.send(subject, scheduled_jobs_messages.Shutdown)
-      monitor.MonitorMonitor(_, subject, _) ->
+      monitor.MonitorMonitor(_, _, subject) ->
         process.send(subject, monitor_messages.Shutdown)
     }
 

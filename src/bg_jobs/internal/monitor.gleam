@@ -11,6 +11,7 @@ import gleam/function
 import gleam/list
 import gleam/option
 import gleam/otp/actor
+import gleam/result
 import lamb
 import lamb/query
 
@@ -56,7 +57,7 @@ pub fn build(
       lamb.insert(
         table,
         name,
-        MonitorMonitor(process.subject_owner(self), self, "MonitorActor"),
+        MonitorMonitor(process.subject_owner(self), "MonitorActor", self),
       )
 
       chip.register(
@@ -110,7 +111,7 @@ fn loop(
       register(
         state,
         MonitorScheduledJob(
-          pid:,
+          pid: pid,
           process_monitor: process.monitor_process(pid),
           subject:,
           name:,
@@ -145,12 +146,12 @@ fn loop(
             // setup process_monitor again
             case value {
               MonitorMonitor(_, _, _) -> option.None
-              MonitorQueue(pid, subject, process_monitor, name) -> {
+              MonitorQueue(pid, name, subject, process_monitor) -> {
                 process.demonitor_process(process_monitor)
                 remove_monitor(state.monitoring, pid)
                 register_queue(subject, name)
               }
-              MonitorScheduledJob(pid, subject, process_monitor, name) -> {
+              MonitorScheduledJob(pid, name, subject, process_monitor) -> {
                 process.demonitor_process(process_monitor)
                 remove_monitor(state.monitoring, pid)
                 register_scheduled_job(subject, name)
@@ -207,7 +208,7 @@ fn update_subject(state: State) {
     |> list.fold(sel, fn(sel, mon) {
       case mon.1 {
         MonitorMonitor(_, _, _) -> sel
-        MonitorQueue(_, _, m, _) | MonitorScheduledJob(_, _, m, _) -> {
+        MonitorQueue(_, _, _, m) | MonitorScheduledJob(_, _, _, m) -> {
           process.selecting_process_down(sel, m, messages.Down)
         }
       }
@@ -227,15 +228,6 @@ fn register(state: State, value: MonitorTableValue) {
 // Ets store
 //---------------
 
-// @internal
-// pub fn insert_monitor(
-//   table: MonitorTable,
-//   pid: process.Pid,
-//   value: MonitorTableValue,
-// ) -> Nil {
-//   lamb.insert(table, pid, value)
-// }
-
 @internal
 pub fn get_monitor_subject() {
   use table <- option.then(get_table() |> option.from_result)
@@ -245,7 +237,7 @@ pub fn get_monitor_subject() {
   |> option.from_result()
   |> option.then(fn(r: #(process.Pid, MonitorTableValue)) {
     case r.1 {
-      MonitorMonitor(_, subject, _) -> option.Some(subject)
+      MonitorMonitor(_, _, subject) -> option.Some(subject)
       _ -> option.None
     }
   })
@@ -281,26 +273,37 @@ pub fn get_by_pid(
   lamb.search(table, query.new() |> query.index(pid))
 }
 
+@internal
+pub fn get_by_name(
+  table: MonitorTable,
+  name: String,
+) -> option.Option(MonitorTableValue) {
+  lamb.search(table, query.new())
+  |> list.find(fn(r: #(_, MonitorTableValue)) { { r.1 }.name == name })
+  |> result.map(fn(r) { r.1 })
+  |> option.from_result()
+}
+
 pub type MonitorTable =
   lamb.Table(String, MonitorTableValue)
 
 pub type MonitorTableValue {
   MonitorQueue(
     pid: process.Pid,
+    name: String,
     subject: process.Subject(queue_messages.Message),
     process_monitor: process.ProcessMonitor,
-    name: String,
   )
   MonitorScheduledJob(
     pid: process.Pid,
+    name: String,
     subject: process.Subject(scheduled_jobs_messages.Message),
     process_monitor: process.ProcessMonitor,
-    name: String,
   )
   MonitorMonitor(
     pid: process.Pid,
-    subject: process.Subject(messages.Message),
     name: String,
+    subject: process.Subject(messages.Message),
   )
 }
 

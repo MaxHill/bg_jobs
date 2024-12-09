@@ -161,9 +161,9 @@ pub fn monitor_restart_test() {
   |> monitor.get_all_monitoring()
   |> list.map(fn(d) {
     case d.1 {
-      monitor.MonitorQueue(pid, _, _, name)
-      | monitor.MonitorScheduledJob(pid, _, _, name)
-      | monitor.MonitorMonitor(pid, _, name) ->
+      monitor.MonitorQueue(pid, name, _, _)
+      | monitor.MonitorScheduledJob(pid, name, _, _)
+      | monitor.MonitorMonitor(pid, name, _) ->
         io.debug(#(name, process.is_alive(pid)))
     }
     d
