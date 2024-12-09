@@ -27,9 +27,7 @@ Program architecture:
     - Polls the database on specified interval looking for avaliable jobs of the type it can handle
   - *otp worker* - scheduled jobs queue (0 or more)
     - Polls the database on specified interval looking for avaliable jobs of the type it can handle
-    - Asks dispatcher to enqueu a new job with apropriate avalible at after processing is done 
-  - *otp worker* - dispatcher (1 per program)
-    - Enqueues jobs. Just writes them to the db
+    - Enqueus a new job with apropriate avalible at after processing is done 
   - *otp worker* - chip registry (1 per program)
     - Holds Subjects to all workers in bg_jobs. This is used for named lookup
 

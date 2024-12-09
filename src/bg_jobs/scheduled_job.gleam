@@ -1,8 +1,6 @@
 import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
-import bg_jobs/internal/dispatcher
-import bg_jobs/internal/dispatcher_messages
 import bg_jobs/internal/monitor
 import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
@@ -627,7 +625,6 @@ pub fn with_event_listeners(
 
 pub fn build(
   registry registry: registries.ScheduledJobRegistry,
-  dispatch_registry dispatch_registry: registries.DispatcherRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
   spec spec: Spec,
 ) {
@@ -660,7 +657,6 @@ pub fn build(
           max_retries: spec.max_retries,
           send_event: events.send_event(spec.event_listeners, _),
           worker: spec.worker,
-          dispatch_registry: dispatch_registry,
         )
 
       actor.Ready(
@@ -689,7 +685,6 @@ type State {
     max_retries: Int,
     send_event: fn(events.Event) -> Nil,
     worker: jobs.Worker,
-    dispatch_registry: registries.DispatcherRegistry,
   )
 }
 
@@ -822,21 +817,19 @@ fn schedule_next(
   state: State,
   next_available_at: #(#(Int, Int, Int), #(Int, Int, Int)),
 ) {
-  // Job dispatcher should always exist otherwise crash
-  let assert Ok(queue) = chip.find(state.dispatch_registry, dispatcher.name)
+  let job =
+    state.db_adapter.enqueue_job(state.worker.job_name, "", next_available_at)
 
-  // Errors are handled in the dispatcher 
-  let _scheduled_job =
-    process.try_call(
-      queue,
-      dispatcher_messages.EnqueueJob(
-        _,
-        state.worker.job_name,
-        "",
-        next_available_at,
-      ),
-      1000,
-    )
+  case job {
+    Ok(job) -> {
+      state.send_event(events.JobEnqueuedEvent(job))
+      Ok(job)
+    }
+    Error(e) -> {
+      state.send_event(events.QueueErrorEvent(state.worker.job_name, e))
+      Error(e)
+    }
+  }
 }
 
 fn execute_scheduled_job(job: jobs.Job, worker: jobs.Worker, state: State) {
