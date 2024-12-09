@@ -120,7 +120,6 @@ pub fn with_event_listener(spec: Spec, event_listener: events.EventListener) {
 ///
 @internal
 pub fn build(
-  monitor_registry monitor_registry: registries.MonitorRegistry,
   registry registry: registries.QueueRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
   spec spec: Spec,
@@ -129,8 +128,7 @@ pub fn build(
     init: fn() {
       let self = process.new_subject()
 
-      let assert Ok(monitor_subject) = chip.find(monitor_registry, monitor.name)
-      monitor.register_queue(monitor_subject, self)
+      monitor.register_queue(self, spec.name)
       // Cleanup previously in flight jobs by this queue name
       // let assert Ok(_) = utils.remove_in_flight_jobs(spec.name, db_adapter)
 

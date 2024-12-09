@@ -252,7 +252,6 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
                 queue_spec
                 |> queue.with_event_listeners(spec.event_listeners)
                 |> queue.build(
-                  monitor_registry: context.monitor_registry,
                   registry: context.queue_registry,
                   db_adapter: spec.db_adapter,
                   spec: _,
@@ -269,7 +268,6 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
                 scheduled_jobs_spec
                 |> scheduled_job.with_event_listeners(spec.event_listeners)
                 |> scheduled_job.build(
-                  monitor_registry: context.monitor_registry,
                   registry: context.scheduled_jobs_registry,
                   dispatch_registry: context.dispatcher_registry,
                   db_adapter: spec.db_adapter,

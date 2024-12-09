@@ -2,8 +2,12 @@ import bg_jobs
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/monitor
+import bg_jobs/internal/monitor_messages
+import bg_jobs/internal/queue_messages
+import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
+import gleam/io
 import gleam/list
 import gleam/otp/actor
 import gleam/string
@@ -28,8 +32,25 @@ pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
   monitor.initialize_named_registries_store(monitor.table_name)
   |> monitor.get_all_monitoring()
   |> list.each(fn(m) {
-    process.unlink(m.0)
-    process.kill(m.0)
+    case m.1 {
+      monitor.MonitorQueue(_, subject, _, _) ->
+        process.send(subject, queue_messages.Shutdown)
+      monitor.MonitorScheduledJob(_, subject, _, _) ->
+        process.send(subject, scheduled_jobs_messages.Shutdown)
+      monitor.MonitorMonitor(_, subject, _) ->
+        process.send(subject, monitor_messages.Shutdown)
+    }
+
+    process.unlink({ m.1 }.pid)
+    process.kill({ m.1 }.pid)
+  })
+
+  process.sleep(10)
+  monitor.initialize_named_registries_store(monitor.table_name)
+  |> monitor.get_all_monitoring()
+  |> list.map(fn(pro) {
+    let pid = { pro.1 }.pid
+    io.debug(process.is_alive(pid))
   })
 }
 

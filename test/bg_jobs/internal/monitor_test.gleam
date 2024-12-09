@@ -1,10 +1,11 @@
 import bg_jobs
 import bg_jobs/db_adapter
 import bg_jobs/internal/monitor
+import bg_jobs/internal/monitor_messages
 import bg_jobs/internal/utils
-import bg_jobs/queue
 import chip
 import gleam/erlang/process
+import gleam/io
 import gleam/list
 import gleeunit/should
 import sqlight
@@ -60,20 +61,6 @@ pub fn release_claimed_jobs_on_process_down_test() {
   test_thing(bg, db_adapter, logger)
   test_thing(bg, db_adapter, logger)
 }
-
-// pub fn monitor_restart_test() {
-//   use conn <- sqlight.with_connection(":memory:")
-//   use #(bg, _db_adapter, _logger, _event_logger) <- jobs_setup.setup(conn)
-//
-//   // let assert Ok(_job) = forever_job.dispatch(bg)
-//   let table = monitor.initialize_named_registries_store(monitor.table_name)
-//   monitor.get_all_monitoring(table)
-//   |> list.map(fn(pid) { process.is_alive(pid.0) })
-//   |> io.debug()
-//
-//   Nil
-//   // get monitor
-// }
 
 pub fn release_claimed_jobs_on_process_down_interval_test() {
   use conn <- sqlight.with_connection(":memory:")
@@ -131,4 +118,62 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
   })
 
   Nil
+}
+
+pub fn monitor_restart_test() {
+  use conn <- sqlight.with_connection(":memory:")
+  use #(_bg, _db_adapter, _logger, _event_logger) <- jobs_setup.setup(conn)
+
+  // Wait for registration to happen
+  process.sleep(100)
+
+  let all_monitoring =
+    monitor.get_table()
+    |> should.be_ok()
+    |> monitor.get_all_monitoring()
+    |> list.map(fn(pro) {
+      let pid = { pro.1 }.pid
+      should.be_true(process.is_alive(pid))
+      pro
+    })
+
+  // Kill monitor
+  let sub1 =
+    monitor.get_monitor_subject()
+    |> should.be_some()
+
+  sub1
+  |> process.subject_owner()
+  |> process.kill
+
+  // process.send(sub1, monitor_messages.Init)
+
+  // wait for restart
+  process.sleep(100)
+
+  // Make sure it's a new monitor
+  // monitor.get_monitor_subject()
+  // |> should.be_some()
+  // |> should.not_equal(sub1)
+
+  monitor.get_table()
+  |> should.be_ok()
+  |> monitor.get_all_monitoring()
+  |> list.map(fn(d) {
+    case d.1 {
+      monitor.MonitorQueue(pid, _, _, name)
+      | monitor.MonitorScheduledJob(pid, _, _, name)
+      | monitor.MonitorMonitor(pid, _, name) ->
+        io.debug(#(name, process.is_alive(pid)))
+    }
+    d
+  })
+  |> list.map(fn(process) {
+    io.debug(#("Is alive", process.is_alive({ process.1 }.pid)))
+    process
+  })
+  |> list.length()
+  |> should.equal(list.length(all_monitoring))
+  Nil
+  // get monitor
 }

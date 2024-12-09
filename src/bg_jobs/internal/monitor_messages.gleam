@@ -6,12 +6,16 @@ import gleam/erlang/process
 //---------------
 pub type Message {
   Shutdown
+  Init
   /// Register a new actor process for monitoring.
   ///
   /// Allows monitor to start tracking the actor,
   /// enabling lifecycle management and job reservation tracking.
-  RegisterQueue(process.Subject(queue_messages.Message))
-  RegisterScheduledJob(process.Subject(scheduled_jobs_messages.Message))
+  RegisterQueue(process.Subject(queue_messages.Message), name: String)
+  RegisterScheduledJob(
+    process.Subject(scheduled_jobs_messages.Message),
+    name: String,
+  )
   /// Handle the termination of a monitored actor process.
   ///
   /// Triggers cleanup operations for jobs associated with the 

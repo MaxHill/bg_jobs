@@ -626,7 +626,6 @@ pub fn with_event_listeners(
 }
 
 pub fn build(
-  monitor_registry monitor_registry: registries.MonitorRegistry,
   registry registry: registries.ScheduledJobRegistry,
   dispatch_registry dispatch_registry: registries.DispatcherRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
@@ -636,8 +635,7 @@ pub fn build(
     init: fn() {
       let self = process.new_subject()
 
-      let assert Ok(monitor_subject) = chip.find(monitor_registry, monitor.name)
-      monitor.register_scheduled_job(monitor_subject, self)
+      monitor.register_scheduled_job(self, spec.worker.job_name)
 
       // Register the queue under a name on initialization
       chip.register(
@@ -697,6 +695,7 @@ type State {
 
 fn loop(message: Message, state: State) -> actor.Next(Message, State) {
   case message {
+    messages.Shutdown -> actor.Stop(process.Normal)
     messages.StartPolling -> {
       process.send_after(
         state.self,
