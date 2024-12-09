@@ -2,9 +2,7 @@ import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/monitor
-import bg_jobs/internal/queue_messages
 import bg_jobs/internal/registries
-import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/jobs
 import bg_jobs/queue
 import bg_jobs/scheduled_job
@@ -12,7 +10,6 @@ import chip
 import gleam/erlang/process
 import gleam/list
 import gleam/option
-import gleam/otp/actor
 import gleam/otp/supervisor
 import gleam/result
 import tempo/duration
@@ -233,14 +230,10 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
           |> fn(children) {
             spec.queues
             |> list.map(fn(queue_spec) {
-              supervisor.worker(fn(context: Context) {
+              supervisor.worker(fn(_context: Context) {
                 queue_spec
                 |> queue.with_event_listeners(spec.event_listeners)
-                |> queue.build(
-                  registry: context.queue_registry,
-                  db_adapter: spec.db_adapter,
-                  spec: _,
-                )
+                |> queue.build(db_adapter: spec.db_adapter, spec: _)
               })
             })
             |> list.fold(children, supervisor.add)
@@ -249,14 +242,10 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
           |> fn(children) {
             spec.scheduled_jobs
             |> list.map(fn(scheduled_jobs_spec) {
-              supervisor.worker(fn(context: Context) {
+              supervisor.worker(fn(_context: Context) {
                 scheduled_jobs_spec
                 |> scheduled_job.with_event_listeners(spec.event_listeners)
-                |> scheduled_job.build(
-                  registry: context.scheduled_jobs_registry,
-                  db_adapter: spec.db_adapter,
-                  spec: _,
-                )
+                |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
               })
             })
             |> list.fold(children, supervisor.add)
@@ -433,26 +422,4 @@ pub fn available_at_from_availability(availability: jobs.JobAvailability) {
       |> naive_datetime.to_tuple()
     }
   }
-}
-
-/// Start the polling for all scheduled and queued jobs
-///
-pub fn start_processing_all(bg: BgJobs) {
-  chip.dispatch(bg.queue_registry, fn(queue) {
-    actor.send(queue, queue_messages.StartPolling)
-  })
-  chip.dispatch(bg.scheduled_jobs_registry, fn(scheduled_job) {
-    actor.send(scheduled_job, scheduled_jobs_messages.StartPolling)
-  })
-}
-
-/// Stop the polling for all scheduled and queued jobs
-///
-pub fn stop_processing_all(bg: BgJobs) {
-  chip.dispatch(bg.queue_registry, fn(queue) {
-    actor.send(queue, queue_messages.StopPolling)
-  })
-  chip.dispatch(bg.scheduled_jobs_registry, fn(scheduled_job) {
-    actor.send(scheduled_job, scheduled_jobs_messages.StopPolling)
-  })
 }

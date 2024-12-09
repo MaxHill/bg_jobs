@@ -6,7 +6,6 @@ import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import chip
 import gleam/erlang/process
 import gleam/function
 import gleam/int
@@ -623,23 +622,13 @@ pub fn with_event_listeners(
   Spec(..spec, event_listeners:)
 }
 
-pub fn build(
-  registry registry: registries.ScheduledJobRegistry,
-  db_adapter db_adapter: db_adapter.DbAdapter,
-  spec spec: Spec,
-) {
+pub fn build(db_adapter db_adapter: db_adapter.DbAdapter, spec spec: Spec) {
   actor.start_spec(actor.Spec(
     init: fn() {
       let self = process.new_subject()
 
+      // regiser scheduled_job for monitoring
       monitor.register_scheduled_job(self, spec.worker.job_name)
-
-      // Register the queue under a name on initialization
-      chip.register(
-        registry,
-        chip.new(self)
-          |> chip.tag(spec.worker.job_name),
-      )
 
       // Schedule first job
       process.send(self, messages.ScheduleNext)

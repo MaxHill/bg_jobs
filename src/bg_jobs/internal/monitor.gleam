@@ -8,6 +8,7 @@ import bg_jobs/internal/utils
 import chip
 import gleam/erlang/process
 import gleam/function
+import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -279,6 +280,7 @@ pub fn get_by_name(
   name: String,
 ) -> option.Option(MonitorTableValue) {
   lamb.search(table, query.new())
+  |> list.reverse()
   |> list.find(fn(r: #(_, MonitorTableValue)) { { r.1 }.name == name })
   |> result.map(fn(r) { r.1 })
   |> option.from_result()

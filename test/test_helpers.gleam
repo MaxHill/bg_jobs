@@ -46,12 +46,6 @@ pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
   })
 
   process.sleep(10)
-  monitor.initialize_named_registries_store(monitor.table_name)
-  |> monitor.get_all_monitoring()
-  |> list.map(fn(pro) {
-    let pid = { pro.1 }.pid
-    io.debug(process.is_alive(pid))
-  })
 }
 
 // Test Logger

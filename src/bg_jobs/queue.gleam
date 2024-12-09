@@ -2,13 +2,10 @@ import bg_jobs/db_adapter
 import bg_jobs/events
 import bg_jobs/internal/monitor
 import bg_jobs/internal/queue_messages as messages
-import bg_jobs/internal/registries
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import chip
 import gleam/erlang/process
 import gleam/function
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -119,25 +116,13 @@ pub fn with_event_listener(spec: Spec, event_listener: events.EventListener) {
 /// even if running on different machine
 ///
 @internal
-pub fn build(
-  registry registry: registries.QueueRegistry,
-  db_adapter db_adapter: db_adapter.DbAdapter,
-  spec spec: Spec,
-) {
+pub fn build(db_adapter db_adapter: db_adapter.DbAdapter, spec spec: Spec) {
   actor.start_spec(actor.Spec(
     init: fn() {
       let self = process.new_subject()
 
+      // regiser queue for monitoring
       monitor.register_queue(self, spec.name)
-      // Cleanup previously in flight jobs by this queue name
-      // let assert Ok(_) = utils.remove_in_flight_jobs(spec.name, db_adapter)
-
-      // Register the queue under a name on initialization
-      chip.register(
-        registry,
-        chip.new(self)
-          |> chip.tag(spec.name),
-      )
 
       // Start polling directly
       process.send(self, messages.StartPolling)
