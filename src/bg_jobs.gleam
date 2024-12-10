@@ -2,14 +2,11 @@ import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/monitor
-import bg_jobs/internal/registries
 import bg_jobs/jobs
 import bg_jobs/queue
 import bg_jobs/scheduled_job
-import chip
 import gleam/erlang/process
 import gleam/list
-import gleam/option
 import gleam/otp/supervisor
 import gleam/result
 import tempo/duration
@@ -31,9 +28,6 @@ import tempo/naive_datetime
 pub type BgJobs {
   BgJobs(
     supervisor: process.Subject(supervisor.Message),
-    queue_registry: registries.QueueRegistry,
-    scheduled_jobs_registry: registries.ScheduledJobRegistry,
-    monitor_registry: registries.MonitorRegistry,
     enqueue_state: EnqueueState,
   )
 }
@@ -48,25 +42,6 @@ pub opaque type EnqueueState {
 
 // Supervisor
 //---------------
-
-type ContextBuilder {
-  ContextBuilder(
-    caller: process.Subject(registries.Registries),
-    queue_registry: registries.QueueRegistry,
-    scheduled_jobs_registry: option.Option(registries.ScheduledJobRegistry),
-    monitor_registry: option.Option(registries.MonitorRegistry),
-  )
-}
-
-type Context {
-  Context(
-    caller: process.Subject(registries.Registries),
-    queue_registry: registries.QueueRegistry,
-    scheduled_jobs_registry: registries.ScheduledJobRegistry,
-    monitor_registry: registries.MonitorRegistry,
-  )
-}
-
 /// Specification for how the supervisor, queues, scheduled_jobs and 
 /// event_listeners should be setup. It's built using the builder functions
 /// ## Example
@@ -208,142 +183,57 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
       |> list.map(fn(spec) { spec.worker }),
     )
 
-  let supervisor =
-    supervisor.start_spec(
-      supervisor.Spec(
-        argument: self,
-        max_frequency: spec.max_frequency,
-        frequency_period: spec.max_frequency,
-        init: fn(children) {
-          children
-          |> registry_workers()
-          // Add monitor
-          |> supervisor.add(
-            supervisor.worker(fn(context: Context) {
-              monitor.build(
-                registry: context.monitor_registry,
-                db_adapter: spec.db_adapter,
-              )
-            }),
-          )
-          // Add the queues
-          |> fn(children) {
-            spec.queues
-            |> list.map(fn(queue_spec) {
-              supervisor.worker(fn(_context: Context) {
-                queue_spec
-                |> queue.with_event_listeners(spec.event_listeners)
-                |> queue.build(db_adapter: spec.db_adapter, spec: _)
-              })
+  supervisor.start_spec(
+    supervisor.Spec(
+      argument: self,
+      max_frequency: spec.max_frequency,
+      frequency_period: spec.max_frequency,
+      init: fn(children) {
+        children
+        // Add monitor
+        |> supervisor.add(
+          supervisor.worker(fn(_) { monitor.build(db_adapter: spec.db_adapter) }),
+        )
+        // Add the queues
+        |> fn(children) {
+          spec.queues
+          |> list.map(fn(queue_spec) {
+            supervisor.worker(fn(_) {
+              queue_spec
+              |> queue.with_event_listeners(spec.event_listeners)
+              |> queue.build(db_adapter: spec.db_adapter, spec: _)
             })
-            |> list.fold(children, supervisor.add)
-          }
-          // Add the scheduled_jobs
-          |> fn(children) {
-            spec.scheduled_jobs
-            |> list.map(fn(scheduled_jobs_spec) {
-              supervisor.worker(fn(_context: Context) {
-                scheduled_jobs_spec
-                |> scheduled_job.with_event_listeners(spec.event_listeners)
-                |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
-              })
+          })
+          |> list.fold(children, supervisor.add)
+        }
+        // Add the scheduled_jobs
+        |> fn(children) {
+          spec.scheduled_jobs
+          |> list.map(fn(scheduled_jobs_spec) {
+            supervisor.worker(fn(_) {
+              scheduled_jobs_spec
+              |> scheduled_job.with_event_listeners(spec.event_listeners)
+              |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
             })
-            |> list.fold(children, supervisor.add)
-          }
-          // Finally notify the main process we're ready
-          |> supervisor.add(supervisor_ready())
-        },
+          })
+          |> list.fold(children, supervisor.add)
+        }
+      },
+    ),
+  )
+  |> result.map(fn(supervisor) {
+    BgJobs(
+      supervisor:,
+      enqueue_state: EnqueueState(
+        workers: all_workers,
+        db_adapter: spec.db_adapter,
+        send_event: events.send_event(spec.event_listeners, _),
       ),
     )
-
-  case supervisor {
-    Ok(supervisor) -> {
-      let assert Ok(registries.Registries(
-        queue_registry,
-        scheduled_jobs_registry,
-        monitor_registry,
-      )) = process.receive(self, 500)
-      Ok(BgJobs(
-        supervisor:,
-        queue_registry:,
-        scheduled_jobs_registry:,
-        monitor_registry:,
-        enqueue_state: EnqueueState(
-          workers: all_workers,
-          db_adapter: spec.db_adapter,
-          send_event: events.send_event(spec.event_listeners, _),
-        ),
-      ))
-    }
-    Error(e) -> {
-      events.send_event(spec.event_listeners, events.SetupErrorEvent(e))
-      Error(errors.SetupError(e))
-    }
-  }
-}
-
-fn registry_workers(children) {
-  children
-  |> supervisor.add(
-    supervisor.worker(fn(_caller: process.Subject(registries.Registries)) {
-      chip.start()
-    })
-    |> supervisor.returning(
-      fn(
-        caller: process.Subject(registries.Registries),
-        registry: registries.QueueRegistry,
-      ) {
-        ContextBuilder(caller, registry, option.None, option.None)
-      },
-    ),
-  )
-  |> supervisor.add(
-    supervisor.worker(fn(_context: ContextBuilder) { chip.start() })
-    |> supervisor.returning(
-      fn(
-        context_builder: ContextBuilder,
-        registry: registries.ScheduledJobRegistry,
-      ) {
-        ContextBuilder(
-          caller: context_builder.caller,
-          queue_registry: context_builder.queue_registry,
-          scheduled_jobs_registry: option.Some(registry),
-          monitor_registry: option.None,
-        )
-      },
-    ),
-  )
-  |> supervisor.add(
-    supervisor.worker(fn(_context: ContextBuilder) { chip.start() })
-    |> supervisor.returning(
-      fn(context_builder: ContextBuilder, registry: registries.MonitorRegistry) {
-        let assert option.Some(scheduled_jobs_registry) =
-          context_builder.scheduled_jobs_registry
-        Context(
-          caller: context_builder.caller,
-          queue_registry: context_builder.queue_registry,
-          scheduled_jobs_registry:,
-          monitor_registry: registry,
-        )
-      },
-    ),
-  )
-}
-
-/// Send queue registry back to parent 
-///
-fn supervisor_ready() {
-  supervisor.worker(fn(_context: Context) { Ok(process.new_subject()) })
-  |> supervisor.returning(fn(context: Context, _self) {
-    process.send(
-      context.caller,
-      registries.Registries(
-        context.queue_registry,
-        context.scheduled_jobs_registry,
-        context.monitor_registry,
-      ),
-    )
-    Nil
+  })
+  |> result.map_error(fn(e) {
+    events.send_event(spec.event_listeners, events.SetupErrorEvent(e))
+    errors.SetupError(e)
   })
 }
 

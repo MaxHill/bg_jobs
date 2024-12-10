@@ -7,7 +7,6 @@ import bg_jobs/internal/queue_messages
 import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
-import gleam/io
 import gleam/list
 import gleam/otp/actor
 import gleam/string

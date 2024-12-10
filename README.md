@@ -28,7 +28,7 @@ Program architecture:
   - *otp worker* - scheduled jobs queue (0 or more)
     - Polls the database on specified interval looking for avaliable jobs of the type it can handle
     - Enqueus a new job with apropriate avalible at after processing is done 
-  - *otp worker* - chip registry (1 per program)
+  - *otp worker* - monitor (1 per program)
     - Holds Subjects to all workers in bg_jobs. This is used for named lookup
 
 ## Durability
@@ -222,8 +222,3 @@ just watch-test # Run tests in watch mode
 - [ ] Document scheduling
 - [ ] Split db adapters to their own packages
   Need to solve testing, since the tests depend on sqlite
-- [ ] Replace [chip](https://hexdocs.pm/chip/) with custom solution
-  Custom worker repository that also monitors and releases claimed jobs if a worker dies. 
-  This is handled today with the worker releasing claims when starting.
-  With the monitoring approach the worker does not have to come alive to prevent abandoned jobs.
-  (And we could also drop the queue-name probably)

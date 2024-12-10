@@ -2,13 +2,10 @@ import bg_jobs/db_adapter
 import bg_jobs/events
 import bg_jobs/internal/monitor_messages as messages
 import bg_jobs/internal/queue_messages
-import bg_jobs/internal/registries
 import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/internal/utils
-import chip
 import gleam/erlang/process
 import gleam/function
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -47,7 +44,6 @@ pub type State {
 
 // TODO: Take options
 pub fn build(
-  registry registry: registries.MonitorRegistry,
   db_adapter db_adapter: db_adapter.DbAdapter,
 ) -> Result(process.Subject(messages.Message), actor.StartError) {
   actor.start_spec(actor.Spec(
@@ -59,12 +55,6 @@ pub fn build(
         table,
         name,
         MonitorMonitor(process.subject_owner(self), "MonitorActor", self),
-      )
-
-      chip.register(
-        registry,
-        chip.new(self)
-          |> chip.tag(name),
       )
 
       let state =

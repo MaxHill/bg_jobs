@@ -1,12 +1,9 @@
 import bg_jobs
 import bg_jobs/db_adapter
-import bg_jobs/internal/monitor
 import bg_jobs/queue
 import bg_jobs/scheduled_job
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
-import gleam/io
-import gleam/list
 import sqlight
 import test_helpers
 import test_helpers/jobs/failing_job

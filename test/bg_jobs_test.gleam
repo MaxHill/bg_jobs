@@ -1,29 +1,21 @@
 import bg_jobs
-import bg_jobs/db_adapter
 import bg_jobs/errors
 import bg_jobs/events
-import bg_jobs/internal/monitor
-import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/queue
 import bg_jobs/sqlite_db_adapter
-import chip
 import gleam/erlang/process
 import gleam/json
 import gleam/list
-import gleam/option
 import gleam/result
 import gleam/string
 import gleeunit
 import gleeunit/should
 import sqlight
-import tempo/duration
-import tempo/naive_datetime
 import test_helpers
 import test_helpers/jobs as jobs_setup
 import test_helpers/jobs/failing_job
 import test_helpers/jobs/log_job
-import youid/uuid
 
 pub fn main() {
   gleeunit.main()

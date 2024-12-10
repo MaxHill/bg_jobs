@@ -1,12 +1,7 @@
-import bg_jobs
-import bg_jobs/db_adapter
 import bg_jobs/internal/monitor
-import bg_jobs/internal/monitor_messages
 import bg_jobs/internal/queue_messages
 import bg_jobs/internal/utils
-import chip
 import gleam/erlang/process
-import gleam/io
 import gleam/list
 import gleam/option
 import gleeunit/should
@@ -24,10 +19,6 @@ pub fn release_claimed_jobs_on_process_down_test() {
   process.sleep(100)
   // Get queue
   let assert Ok(table) = monitor.get_table()
-  monitor.get_all_monitoring(table)
-  |> list.map(fn(p) {
-    let p = p.1
-  })
   let assert option.Some(default_queue) =
     monitor.get_by_name(table, "default_queue")
 
