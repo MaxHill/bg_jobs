@@ -45,7 +45,7 @@ pub fn single_interval_test() {
   )
 
   // Wait for jobs to process
-  process.sleep(200)
+  process.sleep(50)
 
   // Make sure the scheduled job succeeded
   test_helpers.get_log(logger)
@@ -82,7 +82,7 @@ pub fn schedule_test() {
     ),
   )
 
-  process.sleep(200)
+  process.sleep(10)
 
   let job_list =
     sqlight.query(

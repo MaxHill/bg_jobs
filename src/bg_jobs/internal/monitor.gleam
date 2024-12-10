@@ -1,12 +1,10 @@
 import bg_jobs/db_adapter
 import bg_jobs/events
-import bg_jobs/internal/monitor_messages as messages
 import bg_jobs/internal/queue_messages
 import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/internal/utils
 import gleam/erlang/process
 import gleam/function
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -23,7 +21,7 @@ pub fn register_queue(
   name: String,
 ) {
   use monitor_subject <- option.map(get_monitor_subject())
-  actor.send(monitor_subject, messages.RegisterQueue(subject, name))
+  actor.send(monitor_subject, RegisterQueue(subject, name))
 }
 
 pub fn register_scheduled_job(
@@ -31,27 +29,25 @@ pub fn register_scheduled_job(
   name: String,
 ) {
   use monitor_subject <- option.map(get_monitor_subject())
-  actor.send(monitor_subject, messages.RegisterScheduledJob(subject, name))
+  actor.send(monitor_subject, RegisterScheduledJob(subject, name))
 }
 
 pub type State {
   State(
-    self: process.Subject(messages.Message),
+    self: process.Subject(Message),
     monitoring: MonitorTable,
     db_adapter: db_adapter.DbAdapter,
     send_event: fn(events.Event) -> Nil,
   )
 }
 
-// TODO: Take options
 pub fn build(
+  monitor_table table: lamb.Table(String, MonitorTableValue),
   db_adapter db_adapter: db_adapter.DbAdapter,
-) -> Result(process.Subject(messages.Message), actor.StartError) {
+) -> Result(process.Subject(Message), actor.StartError) {
   actor.start_spec(actor.Spec(
     init: fn() {
-      io.debug("starting monitor")
       let self = process.new_subject()
-      let table = initialize_named_registries_store(table_name)
 
       lamb.insert(
         table,
@@ -68,7 +64,7 @@ pub fn build(
         )
 
       // Release all
-      process.send(self, messages.Init)
+      process.send(self, Init)
 
       actor.Ready(
         state,
@@ -81,41 +77,73 @@ pub fn build(
   ))
 }
 
-fn loop(
-  message: messages.Message,
-  state: State,
-) -> actor.Next(messages.Message, State) {
+// Monitor
+//---------------
+pub type Message {
+  Shutdown
+  Init
+  /// Register a new actor process for monitoring.
+  ///
+  /// Allows monitor to start tracking the actor,
+  /// enabling lifecycle management and job reservation tracking.
+  RegisterQueue(process.Subject(queue_messages.Message), name: String)
+  RegisterScheduledJob(
+    process.Subject(scheduled_jobs_messages.Message),
+    name: String,
+  )
+  /// Handle the termination of a monitored actor process.
+  ///
+  /// Triggers cleanup operations for jobs associated with the 
+  /// terminated process.
+  Down(process.ProcessDown)
+
+  /// Proactively releases job reservations for processes that are no longer alive.
+  ///
+  /// This message serves as a fallback mechanism for job reservation cleanup. While 
+  /// job reservations are typically released automatically when a process dies, this 
+  /// message provides an additional safety net to handle scenarios where the standard 
+  /// down message might have been missed or not processed.
+  ///
+  ReleaseAbandonedReservations
+}
+
+fn loop(message: Message, state: State) -> actor.Next(Message, State) {
   case message {
-    messages.Shutdown -> actor.Stop(process.Normal)
-    messages.RegisterQueue(subject, name) -> {
+    Shutdown -> actor.Stop(process.Normal)
+    RegisterQueue(subject, name) -> {
       let pid = process.subject_owner(subject)
-      register(
-        state,
-        MonitorQueue(
-          pid:,
-          process_monitor: process.monitor_process(pid),
-          subject:,
-          name:,
-        ),
-      )
+      let selector =
+        register(
+          state,
+          MonitorQueue(
+            pid:,
+            name:,
+            process_monitor: process.monitor_process(pid),
+            subject:,
+          ),
+        )
+
+      actor.Continue(state, option.Some(selector))
     }
-    messages.RegisterScheduledJob(subject, name) -> {
+    RegisterScheduledJob(subject, name) -> {
       let pid = process.subject_owner(subject)
-      register(
-        state,
-        MonitorScheduledJob(
-          pid: pid,
-          process_monitor: process.monitor_process(pid),
-          subject:,
-          name:,
-        ),
-      )
+      let selector =
+        register(
+          state,
+          MonitorScheduledJob(
+            pid: pid,
+            name:,
+            process_monitor: process.monitor_process(pid),
+            subject:,
+          ),
+        )
+      actor.Continue(state, option.Some(selector))
     }
-    messages.Down(d) -> {
+    Down(d) -> {
       state.send_event(events.MonitorReleasingReserved(d.pid))
 
       // Remove from monitoring list
-      remove_monitor(state.monitoring, d.pid)
+      remove_from_monitor_table(state.monitoring, d.pid)
 
       // Release claimed jobs in database
       let assert Ok(released) =
@@ -128,43 +156,48 @@ fn loop(
 
       actor.Continue(state, option.Some(selector))
     }
-    messages.Init -> {
-      // Remove all dead processes from monitoring table
-      get_all_monitoring(state.monitoring)
-      |> list.map(fn(process) {
-        let value = process.1
-        case process.is_alive(value.pid) {
-          True -> {
-            // Re-register the subjects (overriding the old) to 
-            // setup process_monitor again
-            case value {
-              MonitorMonitor(_, _, _) -> option.None
-              MonitorQueue(pid, name, subject, process_monitor) -> {
-                process.demonitor_process(process_monitor)
-                remove_monitor(state.monitoring, pid)
-                register_queue(subject, name)
-              }
-              MonitorScheduledJob(pid, name, subject, process_monitor) -> {
-                process.demonitor_process(process_monitor)
-                remove_monitor(state.monitoring, pid)
-                register_scheduled_job(subject, name)
+    Init -> {
+      actor.send(state.self, ReleaseAbandonedReservations)
+      let selector =
+        get_all_monitoring(state.monitoring)
+        |> list.map(fn(m) { m.1 })
+        |> list.filter(fn(m) {
+          // Demonitor process. 
+          //(It will be monitored again further down in the register call)
+          case m {
+            MonitorMonitor(_, _, _) -> Nil
+            MonitorQueue(_, _, _, process_monitor)
+            | MonitorScheduledJob(_, _, _, process_monitor) -> {
+              process.demonitor_process(process_monitor)
+            }
+          }
+
+          // Remove dead processes from monitor table (and this list)
+          case process.is_alive(m.pid) {
+            False -> {
+              remove_from_monitor_table(state.monitoring, m.pid)
+              False
+            }
+            True -> True
+          }
+        })
+        // Select all monitored and self, only select self if list is empty
+        |> list.fold(
+          process.new_selector()
+            |> process.selecting(state.self, function.identity),
+          fn(acc, m) {
+            case m {
+              MonitorMonitor(_, _, _) -> acc
+              MonitorQueue(_, _, _, _) | MonitorScheduledJob(_, _, _, _) -> {
+                register(state, m)
               }
             }
-            Nil
-          }
-          False -> {
-            // remove monitoring if process is dead
-            remove_monitor(state.monitoring, { process.1 }.pid)
-            Nil
-          }
-        }
-      })
+          },
+        )
 
-      // Release all reservations by dead processes in the database
-      actor.send(state.self, messages.ReleaseAbandonedReservations)
-      actor.continue(state)
+      actor.Continue(state, option.Some(selector))
     }
-    messages.ReleaseAbandonedReservations -> {
+    ReleaseAbandonedReservations -> {
       let assert Ok(jobs) = state.db_adapter.get_running_jobs()
 
       jobs
@@ -177,7 +210,7 @@ fn loop(
           False -> {
             let assert Ok(_) =
               state.db_adapter.release_jobs_reserved_by(reserved_by)
-            remove_monitor(state.monitoring, pid)
+            remove_from_monitor_table(state.monitoring, pid)
             Nil
           }
           True -> {
@@ -202,7 +235,7 @@ fn update_subject(state: State) {
       case mon.1 {
         MonitorMonitor(_, _, _) -> sel
         MonitorQueue(_, _, _, m) | MonitorScheduledJob(_, _, _, m) -> {
-          process.selecting_process_down(sel, m, messages.Down)
+          process.selecting_process_down(sel, m, Down)
         }
       }
     })
@@ -210,15 +243,11 @@ fn update_subject(state: State) {
 }
 
 fn register(state: State, value: MonitorTableValue) {
-  add_monitor(state.monitoring, value.pid, value)
-
-  // Update selector 
-  let selector = update_subject(state)
-
-  actor.Continue(state, option.Some(selector))
+  add_to_monitor_table(state.monitoring, value.pid, value)
+  update_subject(state)
 }
 
-// Ets store
+// Monitor table
 //---------------
 
 @internal
@@ -237,7 +266,7 @@ pub fn get_monitor_subject() {
 }
 
 @internal
-pub fn add_monitor(
+pub fn add_to_monitor_table(
   table: MonitorTable,
   pid: process.Pid,
   monitor: MonitorTableValue,
@@ -246,7 +275,7 @@ pub fn add_monitor(
 }
 
 @internal
-pub fn remove_monitor(table: MonitorTable, pid: process.Pid) -> Int {
+pub fn remove_from_monitor_table(table: MonitorTable, pid: process.Pid) -> Int {
   let key = utils.pid_to_string(pid)
   lamb.remove(table, query.new() |> query.index(key))
 }
@@ -297,7 +326,7 @@ pub type MonitorTableValue {
   MonitorMonitor(
     pid: process.Pid,
     name: String,
-    subject: process.Subject(messages.Message),
+    subject: process.Subject(Message),
   )
 }
 

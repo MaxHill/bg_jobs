@@ -53,7 +53,6 @@ pub fn enqueue_job_test() {
       job_payload,
       naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
-  process.sleep(100)
 
   let assert Ok(pog.Returned(count, jobs)) =
     pog.query("SELECT * FROM jobs;")
@@ -93,7 +92,6 @@ pub fn claim_jobs_limit_test() {
       naive_datetime.now_utc() |> naive_datetime.to_tuple(),
     )
 
-  process.sleep(1000)
   let assert Ok(pog.Returned(count, _jobs)) =
     pog.query("SELECT * FROM jobs;")
     |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
@@ -501,8 +499,6 @@ pub fn release_claim_test() {
   job_store.release_reservation("test_id")
   |> should.be_ok
 
-  process.sleep(100)
-
   job_store.reserve_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok()
   |> list.first
@@ -522,18 +518,16 @@ pub fn scheduled_job_test() {
       "test_job",
       "test_payaload",
       naive_datetime.now_utc()
-        |> naive_datetime.add(duration.seconds(2))
+        |> naive_datetime.add(duration.seconds(1))
         |> naive_datetime.to_tuple(),
     )
-
-  process.sleep(200)
 
   job_store.reserve_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok
   |> should.equal([])
 
   // Wait for it to become available
-  process.sleep(2000)
+  process.sleep(1000)
 
   job_store.reserve_jobs(["test_job"], 1, "default_queue")
   |> should.be_ok

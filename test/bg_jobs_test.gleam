@@ -29,7 +29,7 @@ pub fn single_job_test() {
   let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
 
   // Wait for jobs to process
-  process.sleep(200)
+  process.sleep(50)
 
   test_helpers.get_log(logger)
   |> should.equal(["test message"])
@@ -42,7 +42,7 @@ pub fn job_is_moved_to_success_after_succeeding_test() {
   let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message 1"))
 
   // Wait for jobs to process
-  process.sleep(100)
+  process.sleep(50)
 
   db_adapter.get_succeeded_jobs(10)
   |> result.map(list.map(_, fn(job: jobs.SucceededJob) {
@@ -64,7 +64,7 @@ pub fn process_muliptle_jobs_test() {
   let assert Ok(_) = dispatch(log_job.Payload("test message 5"))
 
   // Wait for jobs to process
-  process.sleep(300)
+  process.sleep(100)
 
   test_helpers.get_log(logger)
   |> list.sort(by: string.compare)
@@ -85,7 +85,7 @@ pub fn failing_job_test() {
     failing_job.dispatch(bg, failing_job.FailingPayload("Failing"))
 
   // Wait for jobs to process
-  process.sleep(100)
+  process.sleep(50)
 
   db_adapter.get_failed_jobs(1)
   |> should.be_ok
@@ -183,18 +183,8 @@ pub fn events_test() {
   use #(bg, _db_adapter, _logger, event_logger) <- jobs_setup.setup(conn)
 
   let assert Ok(_job) = log_job.dispatch(bg, log_job.Payload("test message"))
-
-  // For logging order let the first event run it's course before
-  // starting the next 
-  process.sleep(200)
-
   let assert Ok(_job) =
     failing_job.dispatch(bg, failing_job.FailingPayload("test message"))
-
-  // For logging order let the first event run it's course before
-  // starting the next 
-  process.sleep(200)
-
   let assert Error(_) =
     bg_jobs.enqueue(
       jobs.JobEnqueueRequest(
@@ -205,7 +195,7 @@ pub fn events_test() {
       bg,
     )
 
-  process.sleep(200)
+  process.sleep(50)
 
   test_helpers.get_log(event_logger)
   |> list.sort(by: string.compare)

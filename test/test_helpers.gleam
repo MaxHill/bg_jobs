@@ -2,7 +2,6 @@ import bg_jobs
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/monitor
-import bg_jobs/internal/monitor_messages
 import bg_jobs/internal/queue_messages
 import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/sqlite_db_adapter
@@ -59,13 +58,11 @@ pub fn cleanup_processes(bg: bg_jobs.BgJobs) {
       monitor.MonitorScheduledJob(_, _, subject, _) ->
         process.send(subject, scheduled_jobs_messages.Shutdown)
       monitor.MonitorMonitor(_, _, subject) ->
-        process.send(subject, monitor_messages.Shutdown)
+        process.send(subject, monitor.Shutdown)
     }
     process.unlink({ m.1 }.pid)
     process.kill({ m.1 }.pid)
   })
-
-  process.sleep(10)
 }
 
 // Test Logger

@@ -4,7 +4,6 @@ import bg_jobs/internal/queue_messages
 import bg_jobs/internal/scheduled_jobs_messages
 import bg_jobs/internal/utils
 import gleam/erlang/process
-import gleam/io
 import gleam/list
 import gleam/option
 import gleeunit/should
@@ -18,10 +17,14 @@ pub fn release_claimed_jobs_on_process_down_test() {
   use #(bg, db_adapter, logger, _event_logger) <- jobs_setup.setup(conn)
 
   let assert Ok(_job) = forever_job.dispatch(bg)
-  process.sleep(100)
+  // Wait for job to be picked up
+  process.sleep(10)
+
+  // Test restart 4 times
   test_release_claim(1, db_adapter, logger)
   test_release_claim(2, db_adapter, logger)
   test_release_claim(3, db_adapter, logger)
+  test_release_claim(4, db_adapter, logger)
 }
 
 fn test_release_claim(
@@ -52,7 +55,7 @@ fn test_release_claim(
   process.kill(default_queue.pid)
 
   //  Wait for restart
-  process.sleep(100)
+  process.sleep(50)
 
   // Assert the job has been claimed by the new actor
   let new_default_queue =
@@ -82,7 +85,7 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
   use #(_bg, db_adapter, _logger, _event_logger) <- jobs_setup.setup_interval(
     conn,
   )
-  process.sleep(100)
+  process.sleep(10)
   // Get scheduled job
   let assert Ok(table) = monitor.get_table()
   let assert option.Some(scheduled_job) =
@@ -105,7 +108,7 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
   process.kill(scheduled_job.pid)
 
   //  Wait for restart
-  process.sleep(500)
+  process.sleep(10)
 
   // Assert the job has been claimed by the new actor
   let new_scheduled_job =
@@ -150,26 +153,16 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
   Nil
 }
 
-pub fn monitor_restart_test() {
+pub fn monitor_restart_bookkeeping_test() {
   use conn <- sqlight.with_connection(":memory:")
   use #(_bg, _db_adapter, _logger, _event_logger) <- jobs_setup.setup(conn)
-
-  // Wait for registration to happen
-  process.sleep(100)
+  // Wait for register
+  process.sleep(10)
 
   let all_monitoring =
     monitor.get_table()
     |> should.be_ok()
     |> monitor.get_all_monitoring()
-    |> list.map(fn(d) {
-      case d.1 {
-        monitor.MonitorQueue(pid, name, _, _)
-        | monitor.MonitorScheduledJob(pid, name, _, _)
-        | monitor.MonitorMonitor(pid, name, _) ->
-          io.debug(#(name, process.is_alive(pid)))
-      }
-      d
-    })
     |> list.map(fn(pro) {
       let pid = { pro.1 }.pid
       should.be_true(process.is_alive(pid))
@@ -185,34 +178,19 @@ pub fn monitor_restart_test() {
   |> process.subject_owner()
   |> process.kill
 
-  // process.send(sub1, monitor_messages.Init)
-
   // wait for restart
-  process.sleep(500)
+  process.sleep(10)
 
   // Make sure it's a new monitor
-  // monitor.get_monitor_subject()
-  // |> should.be_some()
-  // |> should.not_equal(sub1)
+  monitor.get_monitor_subject()
+  |> should.be_some()
+  |> should.not_equal(sub1)
 
+  // Make sure the new monitor is monitoring the same as the old one
   monitor.get_table()
   |> should.be_ok()
   |> monitor.get_all_monitoring()
-  |> list.map(fn(d) {
-    case d.1 {
-      monitor.MonitorQueue(pid, name, _, _)
-      | monitor.MonitorScheduledJob(pid, name, _, _)
-      | monitor.MonitorMonitor(pid, name, _) ->
-        io.debug(#(name, process.is_alive(pid)))
-    }
-    d
-  })
-  |> list.map(fn(process) {
-    io.debug(#("Is alive", process.is_alive({ process.1 }.pid)))
-    process
-  })
   |> list.length()
   |> should.equal(list.length(all_monitoring))
   Nil
-  // get monitor
 }

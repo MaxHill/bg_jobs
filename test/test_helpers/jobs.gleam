@@ -65,8 +65,6 @@ pub fn setup(
 
   // Post test cleanup
   test_helpers.cleanup_processes(bg)
-  // Give it time to stop polling before connection closes
-  process.sleep(100)
 }
 
 pub fn setup_interval(
@@ -131,8 +129,6 @@ pub fn setup_interval(
 
   // Post test cleanup
   test_helpers.cleanup_processes(bg)
-  // Give it time to stop polling before connection closes
-  process.sleep(100)
 }
 
 pub fn setup_schedule(
@@ -160,6 +156,4 @@ pub fn setup_schedule(
 
   // Post test cleanup
   test_helpers.cleanup_processes(bg)
-  // Give it time to stop polling before connection closes
-  process.sleep(100)
 }

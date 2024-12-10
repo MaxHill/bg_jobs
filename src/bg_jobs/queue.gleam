@@ -155,6 +155,16 @@ pub fn build(db_adapter db_adapter: db_adapter.DbAdapter, spec spec: Spec) {
 // QueueActor 
 //---------------
 
+pub type Message {
+  Shutdown
+  StartPolling
+  StopPolling
+  WaitBetweenPoll
+  HandleError(jobs.Job, exception: String)
+  HandleSuccess(jobs.Job)
+  ProcessJobs
+}
+
 type QueueState {
   QueueState(
     // state

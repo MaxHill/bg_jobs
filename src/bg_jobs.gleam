@@ -246,6 +246,8 @@ pub fn with_scheduled_job(
 ///
 /// ````
 pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
+  let monitor_table =
+    monitor.initialize_named_registries_store(monitor.table_name)
   let all_workers =
     spec.queues
     |> list.map(fn(spec) { spec.workers })
@@ -261,7 +263,7 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
   // Add monitor
   |> sup.add(
     sup.worker_child("monitor", fn() {
-      monitor.build(db_adapter: spec.db_adapter)
+      monitor.build(monitor_table: monitor_table, db_adapter: spec.db_adapter)
       |> result.map(process.subject_owner)
     }),
   )
