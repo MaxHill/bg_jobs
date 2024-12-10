@@ -7,6 +7,7 @@ import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
 import gleam/json
 import gleam/list
+import gleam/otp/static_supervisor as sup
 import gleam/result
 import gleam/string
 import gleeunit
@@ -308,21 +309,19 @@ pub fn builder_test() {
     )
 
   let spec =
-    bg_jobs.new(db_adapter)
-    |> bg_jobs.with_supervisor_max_frequency(10)
-    |> bg_jobs.with_supervisor_frequency_period(10)
+    sup.new(sup.OneForOne)
+    |> bg_jobs.new(db_adapter)
     |> bg_jobs.with_event_listener(test_event_listener)
     |> bg_jobs.with_queue(test_queue_spec)
 
   let spec2 =
-    bg_jobs.new(db_adapter)
+    sup.new(sup.OneForOne)
+    |> bg_jobs.new(db_adapter)
     |> bg_jobs.with_event_listener(test_event_listener)
     |> bg_jobs.with_queue(test_queue_spec)
     |> bg_jobs.with_event_listener(test_event_listener)
     |> bg_jobs.with_queue(test_queue_spec)
 
-  spec.max_frequency |> should.equal(10)
-  spec.frequency_period |> should.equal(10)
   spec.db_adapter |> should.equal(db_adapter)
   spec.event_listeners |> should.equal([test_event_listener])
   spec.queues |> should.equal([test_queue_spec])

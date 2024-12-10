@@ -4,6 +4,7 @@ import bg_jobs/queue
 import bg_jobs/scheduled_job
 import bg_jobs/sqlite_db_adapter
 import gleam/erlang/process
+import gleam/otp/static_supervisor as sup
 import sqlight
 import test_helpers
 import test_helpers/jobs/failing_job
@@ -44,11 +45,10 @@ pub fn setup(
   let assert Ok(_) = db_adapter.migrate_up([])
 
   let assert Ok(bg) =
-    bg_jobs.new(db_adapter)
-    // Max 100 restarts..
-    |> bg_jobs.with_supervisor_max_frequency(100)
-    // .. in 1 second
-    |> bg_jobs.with_supervisor_frequency_period(1)
+    sup.new(sup.OneForOne)
+    // Max 100 restarts in 1 second
+    |> sup.restart_tolerance(100, 1)
+    |> bg_jobs.new(db_adapter)
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_queue(
       queue("default_queue")
@@ -91,7 +91,8 @@ pub fn setup_interval(
   let assert Ok(_) = db_adapter.migrate_up([])
 
   let assert Ok(bg) =
-    bg_jobs.new(db_adapter)
+    sup.new(sup.OneForOne)
+    |> bg_jobs.new(db_adapter)
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_scheduled_job(
       scheduled_job.Spec(
@@ -147,7 +148,8 @@ pub fn setup_schedule(
   let assert Ok(_) = db_adapter.migrate_up([])
 
   let assert Ok(bg) =
-    bg_jobs.new(db_adapter)
+    sup.new(sup.OneForOne)
+    |> bg_jobs.new(db_adapter)
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_scheduled_job(spec)
     |> bg_jobs.build()

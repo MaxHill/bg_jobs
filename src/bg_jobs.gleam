@@ -18,7 +18,9 @@ import tempo/naive_datetime
 /// 
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
+///  let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///   |> bg_jobs.new(db_adapter)
 ///  ...
 ///  |> bg_jobs.build()
 ///  
@@ -43,7 +45,9 @@ pub opaque type EnqueueState {
 /// event_listeners should be setup. It's built using the builder functions
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
+///  let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///   bg_jobs.new(db_adapter)
 ///   // Event listeners
 ///   |> bg_jobs.with_event_listener(logger_event_listener.listner)
 ///   // Queues
@@ -55,74 +59,48 @@ pub opaque type EnqueueState {
 ///   )) 
 ///   |> bg_jobs.build()
 /// ```
-pub type BgJobsSupervisorSpec {
-  BgJobsSupervisorSpec(
+pub type BgJobsBuilder {
+  BgJobsBuilder(
+    supervisor: sup.Builder,
     db_adapter: db_adapter.DbAdapter,
     event_listeners: List(events.EventListener),
-    frequency_period: Int,
-    max_frequency: Int,
     queues: List(queue.Spec),
     scheduled_jobs: List(scheduled_job.Spec),
   )
 }
 
-/// Create a new default BgJobsSupervisorSpec
+/// Create a new default BgJobsBuilder
 ///
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
+///  let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///   bg_jobs.new(db_adapter)
 /// ```
-pub fn new(db_adapter: db_adapter.DbAdapter) {
-  BgJobsSupervisorSpec(
+pub fn new(supervisor: sup.Builder, db_adapter: db_adapter.DbAdapter) {
+  BgJobsBuilder(
+    supervisor:,
     db_adapter: db_adapter,
     event_listeners: [],
-    max_frequency: 5,
-    frequency_period: 1,
     queues: [],
     scheduled_jobs: [],
   )
-}
-
-/// Set the supervisors max frequency
-///
-/// ## Example
-/// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  |> with_supervisor_max_frequency(5)
-/// ```
-pub fn with_supervisor_max_frequency(
-  spec: BgJobsSupervisorSpec,
-  max_frequency: Int,
-) {
-  BgJobsSupervisorSpec(..spec, max_frequency:)
-}
-
-/// Set the supervisors frequency period
-///
-/// ## Example
-/// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  |> with_supervisor_frequency_period(1)
-/// ```
-pub fn with_supervisor_frequency_period(
-  spec: BgJobsSupervisorSpec,
-  frequency_period: Int,
-) {
-  BgJobsSupervisorSpec(..spec, frequency_period:)
 }
 
 /// Add an event_listener to all queues under the supervisor
 ///
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  |> with_event_listener(logger_event_listener.listener)
+///  let bg = 
+///    static_supervisor.new(static_supervisor.OneForOne)
+///    |> bg_jobs.new(db_adapter)
+///    |> with_event_listener(logger_event_listener.listener)
 /// ```
 pub fn with_event_listener(
-  spec: BgJobsSupervisorSpec,
+  spec: BgJobsBuilder,
   event_listener: events.EventListener,
 ) {
-  BgJobsSupervisorSpec(
+  BgJobsBuilder(
     ..spec,
     event_listeners: list.flatten([spec.event_listeners, [event_listener]]),
   )
@@ -132,28 +110,32 @@ pub fn with_event_listener(
 ///
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  |> with_queue(queue.new("example_queue") |> queue.add_worker(example_worker))
+///  let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///   |> bg_jobs.new(db_adapter)
+///   |> with_queue(queue.new("example_queue") |> queue.add_worker(example_worker))
 /// ```
-pub fn with_queue(spec: BgJobsSupervisorSpec, queue: queue.Spec) {
-  BgJobsSupervisorSpec(..spec, queues: list.flatten([spec.queues, [queue]]))
+pub fn with_queue(spec: BgJobsBuilder, queue: queue.Spec) {
+  BgJobsBuilder(..spec, queues: list.flatten([spec.queues, [queue]]))
 }
 
 /// Add a scheduled job spec to create a new queue with the supervisor
 ///
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  |> with_scheduled_job(scheduled_job.new(
-///    example_worker, 
-///    scheduled_job.interval_minutes(1)
-///  ))
+///  let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///   |> bg_jobs.new(db_adapter)
+///   |> with_scheduled_job(scheduled_job.new(
+///     example_worker, 
+///     scheduled_job.interval_minutes(1)
+///   ))
 /// ```
 pub fn with_scheduled_job(
-  spec: BgJobsSupervisorSpec,
+  spec: BgJobsBuilder,
   scheduled_job: scheduled_job.Spec,
 ) {
-  BgJobsSupervisorSpec(
+  BgJobsBuilder(
     ..spec,
     scheduled_jobs: list.flatten([spec.scheduled_jobs, [scheduled_job]]),
   )
@@ -163,89 +145,14 @@ pub fn with_scheduled_job(
 ///
 /// ## Example
 /// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  ...
-///  |> bg_jobs.build()
+///  let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///     |> bg_jobs.new(db_adapter)
+///     ...
+///     |> bg_jobs.build()
 ///
 /// ````
-// pub fn build_old(
-//   spec: BgJobsSupervisorSpec,
-// ) -> Result(BgJobs, errors.BgJobError) {
-//   let self = process.new_subject()
-//
-//   let all_workers =
-//     spec.queues
-//     |> list.map(fn(spec) { spec.workers })
-//     |> list.flatten
-//     |> list.append(
-//       spec.scheduled_jobs
-//       |> list.map(fn(spec) { spec.worker }),
-//     )
-//
-//   supervisor.start_spec(
-//     supervisor.Spec(
-//       argument: self,
-//       max_frequency: spec.max_frequency,
-//       frequency_period: spec.max_frequency,
-//       init: fn(children) {
-//         children
-//         // Add monitor
-//         |> supervisor.add(
-//           supervisor.worker(fn(_) { monitor.build(db_adapter: spec.db_adapter) }),
-//         )
-//         // Add the queues
-//         |> fn(children) {
-//           spec.queues
-//           |> list.map(fn(queue_spec) {
-//             supervisor.worker(fn(_) {
-//               queue_spec
-//               |> queue.with_event_listeners(spec.event_listeners)
-//               |> queue.build(db_adapter: spec.db_adapter, spec: _)
-//             })
-//           })
-//           |> list.fold(children, supervisor.add)
-//         }
-//         // Add the scheduled_jobs
-//         |> fn(children) {
-//           spec.scheduled_jobs
-//           |> list.map(fn(scheduled_jobs_spec) {
-//             supervisor.worker(fn(_) {
-//               scheduled_jobs_spec
-//               |> scheduled_job.with_event_listeners(spec.event_listeners)
-//               |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
-//             })
-//           })
-//           |> list.fold(children, supervisor.add)
-//         }
-//       },
-//     ),
-//   )
-//   |> result.map(fn(supervisor) {
-//     BgJobs(
-//       supervisor:,
-//       enqueue_state: EnqueueState(
-//         workers: all_workers,
-//         db_adapter: spec.db_adapter,
-//         send_event: events.send_event(spec.event_listeners, _),
-//       ),
-//     )
-//   })
-//   |> result.map_error(fn(e) {
-//     events.send_event(spec.event_listeners, events.SetupErrorEvent(e))
-//     errors.SetupError(e)
-//   })
-// }
-
-/// Create the supervisor and all it's queues based on the provided spec
-///
-/// ## Example
-/// ```gleam
-///  let bg = bg_jobs.new(db_adapter)
-///  ...
-///  |> bg_jobs.build()
-///
-/// ````
-pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
+pub fn build(spec: BgJobsBuilder) -> Result(BgJobs, errors.BgJobError) {
   let monitor_table =
     monitor.initialize_named_registries_store(monitor.table_name)
   let all_workers =
@@ -257,7 +164,7 @@ pub fn build(spec: BgJobsSupervisorSpec) -> Result(BgJobs, errors.BgJobError) {
       |> list.map(fn(spec) { spec.worker }),
     )
 
-  sup.new(sup.OneForOne)
+  spec.supervisor
   // max [intensity] restart fails within [period] seconds
   |> sup.restart_tolerance(intensity: 5, period: 1)
   // Add monitor
@@ -337,9 +244,11 @@ pub fn job_with_available_in(job_request, availabile_in) {
 ///
 /// ## Example
 /// ```gleam
-/// let bg = bg_jobs.new() |> ... |> bg_jobs.build()
-/// bg_jobs.new_job("example_job", "payload")
-/// |> bg_jobs.enqueue(bg);
+/// let bg = 
+///   static_supervisor.new(static_supervisor.OneForOne)
+///   |> bg_jobs.new() |> ... |> bg_jobs.build()
+///   |> bg_jobs.new_job("example_job", "payload")
+///   |> bg_jobs.enqueue(bg);
 /// ```
 pub fn enqueue(job_request: jobs.JobEnqueueRequest, bg: BgJobs) {
   let state = bg.enqueue_state
