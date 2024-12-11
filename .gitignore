@@ -1,6 +1,7 @@
 *.beam
 *.ez
 /build
+.tmux_sessionizer
 erl_crash.dump
 
 dispatch
