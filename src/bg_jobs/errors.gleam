@@ -9,6 +9,7 @@ pub type BgJobError {
   DispatchJobError(String)
   SetupError(dynamic.Dynamic)
   ScheduleError(String)
+  ScheduleValidationError(String)
   UnknownError(String)
   NoWorkerForJobError(jobs.JobEnqueueRequest, List(jobs.Worker))
   DateOutOfBoundsError(tempo.DateOutOfBoundsError)

@@ -30,9 +30,35 @@ pub type Spec {
   )
 }
 
+pub type SpecBuilder {
+  SpecBuilder(
+    schedule_builder: ScheduleBuilder,
+    worker: jobs.Worker,
+    max_retries: Int,
+    init_timeout: Int,
+    poll_interval: Int,
+    event_listeners: List(events.EventListener),
+  )
+}
+
 pub type Schedule {
   Interval(Duration)
   Schedule(DateSchedule)
+}
+
+pub type ScheduleBuilder {
+  IntervalBuilder(Duration)
+  ScheduleBuilder(DateScheduleBuilder)
+}
+
+pub fn map_schedule_builder(
+  schedule: ScheduleBuilder,
+  f: fn(DateScheduleBuilder) -> DateScheduleBuilder,
+) {
+  case schedule {
+    IntervalBuilder(i) -> IntervalBuilder(i)
+    ScheduleBuilder(s) -> ScheduleBuilder(f(s))
+  }
 }
 
 // Interval
@@ -60,32 +86,32 @@ pub fn to_gtempo(duration: Duration) {
 
 /// Create interval schedule in milliseconds
 pub fn new_interval_milliseconds(milliseconds: Int) {
-  Interval(Millisecond(milliseconds))
+  IntervalBuilder(Millisecond(milliseconds))
 }
 
 /// Create interval schedule in seconds
 pub fn new_interval_seconds(seconds: Int) {
-  Interval(Second(seconds))
+  IntervalBuilder(Second(seconds))
 }
 
 /// Create interval schedule in minutes
 pub fn new_interval_minutes(minutes: Int) {
-  Interval(Minute(minutes))
+  IntervalBuilder(Minute(minutes))
 }
 
 /// Create interval schedule in hours
 pub fn new_interval_hours(hours: Int) {
-  Interval(Hour(hours))
+  IntervalBuilder(Hour(hours))
 }
 
 /// Create interval schedule in days
 pub fn new_interval_days(days: Int) {
-  Interval(Day(days))
+  IntervalBuilder(Day(days))
 }
 
 /// Create interval schedule in weeks
 pub fn new_interval_weeks(weeks: Int) {
-  Interval(Week(weeks))
+  IntervalBuilder(Week(weeks))
 }
 
 // Schdedule
@@ -128,23 +154,33 @@ pub type DateError {
   OutOfBoundsError(String)
 }
 
+pub fn to_bg_jobs_error(date_error: DateError) -> errors.BgJobError {
+  case date_error {
+    DateError(_) -> errors.ScheduleValidationError("Date is out of bounds")
+    OutOfBoundsError(e) ->
+      errors.ScheduleValidationError("Schedule is out of bounds: " <> e)
+    TimeError(_) -> errors.ScheduleValidationError("Time is out of bounds")
+  }
+}
+
 /// Create a new schedule that runs on the first second
 /// every minut
-pub fn new_schedule() -> DateScheduleBuilder {
-  DateScheduleBuilder(
+pub fn new_schedule() -> ScheduleBuilder {
+  ScheduleBuilder(DateScheduleBuilder(
     second: Specific([Value(0)]),
     minute: Every,
     hour: Every,
     day_of_month: Every,
     month: Every,
     day_of_week: Every,
-  )
+  ))
 }
 
 // Second 
 //---------------
 /// Sets the schedule to trigger every second.
-pub fn every_second(self: DateScheduleBuilder) -> DateScheduleBuilder {
+pub fn every_second(self: ScheduleBuilder) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   DateScheduleBuilder(
     Every,
     self.minute,
@@ -161,7 +197,8 @@ pub fn every_second(self: DateScheduleBuilder) -> DateScheduleBuilder {
 /// Note: the default value is to trigger on second 0 so you would 
 /// need to set it to every second first and then to a specific to 
 /// only get that 
-pub fn on_second(self: DateScheduleBuilder, second: Int) -> DateScheduleBuilder {
+pub fn on_second(self: ScheduleBuilder, second: Int) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let second = case self.second {
     Every -> Specific([Value(second)])
     Specific(values) -> Specific(list.flatten([values, [Value(second)]]))
@@ -179,10 +216,11 @@ pub fn on_second(self: DateScheduleBuilder, second: Int) -> DateScheduleBuilder 
 
 /// Sets a range of seconds during which the schedule should trigger.
 pub fn between_seconds(
-  self: DateScheduleBuilder,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> DateScheduleBuilder {
+) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let second = case self.second {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
@@ -201,7 +239,8 @@ pub fn between_seconds(
 //---------------
 /// Adds a specific minute at which the schedule should trigger.
 /// If other specific minutes are already set, appends the given minute.
-pub fn on_minute(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
+pub fn on_minute(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let minute = case self.minute {
     Every -> {
       Specific([Value(value)])
@@ -222,10 +261,11 @@ pub fn on_minute(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
 
 /// Sets a range of minutes during which the schedule should trigger.
 pub fn between_minutes(
-  self: DateScheduleBuilder,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> DateScheduleBuilder {
+) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let minute = case self.minute {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
@@ -244,7 +284,8 @@ pub fn between_minutes(
 //---------------
 /// Adds a specific hour at which the schedule should trigger.
 /// If other specific hours are already set, appends the given hour.
-pub fn on_hour(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
+pub fn on_hour(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let hour = case self.hour {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
@@ -261,10 +302,11 @@ pub fn on_hour(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
 
 /// Sets a range of hours during which the schedule should trigger.
 pub fn between_hours(
-  self: DateScheduleBuilder,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> DateScheduleBuilder {
+) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let hour = case self.hour {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
@@ -285,10 +327,8 @@ pub fn between_hours(
 
 /// Adds a specific day of the month on which the schedule should trigger.
 /// If other specific days are already set, appends the given day.
-pub fn on_day_of_month(
-  self: DateScheduleBuilder,
-  value: Int,
-) -> DateScheduleBuilder {
+pub fn on_day_of_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let day_of_month = case self.day_of_month {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
@@ -305,10 +345,11 @@ pub fn on_day_of_month(
 
 /// Sets a range of days of the month during which the schedule should trigger.
 pub fn between_day_of_months(
-  self: DateScheduleBuilder,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> DateScheduleBuilder {
+) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let day_of_month = case self.day_of_month {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
@@ -329,7 +370,8 @@ pub fn between_day_of_months(
 
 /// Adds a specific month in which the schedule should trigger.
 /// If other specific months are already set, appends the given month.
-pub fn on_month(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
+pub fn on_month(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let month = case self.month {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
@@ -346,10 +388,11 @@ pub fn on_month(self: DateScheduleBuilder, value: Int) -> DateScheduleBuilder {
 
 /// Sets a range of months during which the schedule should trigger.
 pub fn between_months(
-  self: DateScheduleBuilder,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> DateScheduleBuilder {
+) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let month = case self.month {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
@@ -365,62 +408,62 @@ pub fn between_months(
 }
 
 /// Shortcut function to set the schedule to trigger in January.
-pub fn on_januaries(self: DateScheduleBuilder) {
+pub fn on_januaries(self: ScheduleBuilder) {
   on_month(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger in February.
-pub fn on_februaries(self: DateScheduleBuilder) {
+pub fn on_februaries(self: ScheduleBuilder) {
   on_month(self, 2)
 }
 
 /// Shortcut function to set the schedule to trigger in March.
-pub fn on_marches(self: DateScheduleBuilder) {
+pub fn on_marches(self: ScheduleBuilder) {
   on_month(self, 3)
 }
 
 /// Shortcut function to set the schedule to trigger in April.
-pub fn on_aprils(self: DateScheduleBuilder) {
+pub fn on_aprils(self: ScheduleBuilder) {
   on_month(self, 4)
 }
 
 /// Shortcut function to set the schedule to trigger in May.
-pub fn on_mays(self: DateScheduleBuilder) {
+pub fn on_mays(self: ScheduleBuilder) {
   on_month(self, 5)
 }
 
 /// Shortcut function to set the schedule to trigger in June.
-pub fn on_junes(self: DateScheduleBuilder) {
+pub fn on_junes(self: ScheduleBuilder) {
   on_month(self, 6)
 }
 
 /// Shortcut function to set the schedule to trigger in July.
-pub fn on_julies(self: DateScheduleBuilder) {
+pub fn on_julies(self: ScheduleBuilder) {
   on_month(self, 7)
 }
 
 /// Shortcut function to set the schedule to trigger in August.
-pub fn on_augusts(self: DateScheduleBuilder) {
+pub fn on_augusts(self: ScheduleBuilder) {
   on_month(self, 8)
 }
 
 /// Shortcut function to set the schedule to trigger in September.
-pub fn on_septembers(self: DateScheduleBuilder) {
+pub fn on_septembers(self: ScheduleBuilder) {
   on_month(self, 9)
 }
 
 /// Shortcut function to set the schedule to trigger in October.
-pub fn on_octobers(self: DateScheduleBuilder) {
+pub fn on_octobers(self: ScheduleBuilder) {
   on_month(self, 10)
 }
 
 /// Shortcut function to set the schedule to trigger in November.
-pub fn on_novembers(self: DateScheduleBuilder) {
+pub fn on_novembers(self: ScheduleBuilder) {
   on_month(self, 11)
 }
 
 /// Shortcut function to set the schedule to trigger in December.
-pub fn on_decembers(self: DateScheduleBuilder) {
+pub fn on_decembers(self: ScheduleBuilder) {
   on_month(self, 12)
 }
 
@@ -429,10 +472,8 @@ pub fn on_decembers(self: DateScheduleBuilder) {
 
 /// Adds a specific day of the week on which the schedule should trigger.
 /// If other specific days are already set, appends the given day.
-pub fn on_day_of_week(
-  self: DateScheduleBuilder,
-  value: Int,
-) -> DateScheduleBuilder {
+pub fn on_day_of_week(self: ScheduleBuilder, value: Int) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let on_day_of_week = case self.day_of_week {
     Every -> Specific([Value(value)])
     Specific(values) -> Specific(list.flatten([values, [Value(value)]]))
@@ -449,10 +490,11 @@ pub fn on_day_of_week(
 
 /// Sets a range of days of the week during which the schedule should trigger.
 pub fn between_day_of_weeks(
-  self: DateScheduleBuilder,
+  self: ScheduleBuilder,
   start: Int,
   end: Int,
-) -> DateScheduleBuilder {
+) -> ScheduleBuilder {
+  use self <- map_schedule_builder(self)
   let on_day_of_week = case self.day_of_week {
     Every -> Specific([Range(start, end)])
     Specific(values) -> Specific(list.flatten([values, [Range(start, end)]]))
@@ -468,42 +510,42 @@ pub fn between_day_of_weeks(
 }
 
 /// Shortcut function to set the schedule to trigger on Mondays.
-pub fn on_mondays(self: DateScheduleBuilder) {
+pub fn on_mondays(self: ScheduleBuilder) {
   on_day_of_week(self, 1)
 }
 
 /// Shortcut function to set the schedule to trigger on Thuesdays.
-pub fn on_thuesdays(self: DateScheduleBuilder) {
+pub fn on_thuesdays(self: ScheduleBuilder) {
   on_day_of_week(self, 2)
 }
 
 /// Shortcut function to set the schedule to trigger on Wednesdays.
-pub fn on_wednesdays(self: DateScheduleBuilder) {
+pub fn on_wednesdays(self: ScheduleBuilder) {
   on_day_of_week(self, 3)
 }
 
 /// Shortcut function to set the schedule to trigger on Thursdays.
-pub fn on_thursdays(self: DateScheduleBuilder) {
+pub fn on_thursdays(self: ScheduleBuilder) {
   on_day_of_week(self, 4)
 }
 
 /// Shortcut function to set the schedule to trigger on Fridays.
-pub fn on_fridays(self: DateScheduleBuilder) {
+pub fn on_fridays(self: ScheduleBuilder) {
   on_day_of_week(self, 5)
 }
 
 /// Shortcut function to set the schedule to trigger on Saturdays.
-pub fn on_saturdays(self: DateScheduleBuilder) {
+pub fn on_saturdays(self: ScheduleBuilder) {
   on_day_of_week(self, 6)
 }
 
 /// Shortcut function to set the schedule to trigger on Sundays.
-pub fn on_sundays(self: DateScheduleBuilder) {
+pub fn on_sundays(self: ScheduleBuilder) {
   on_day_of_week(self, 7)
 }
 
 /// Shortcut function to set the schedule to trigger on weekdays (Monday through Friday).
-pub fn on_weekdays(self: DateScheduleBuilder) {
+pub fn on_weekdays(self: ScheduleBuilder) {
   self
   |> on_mondays
   |> on_thuesdays
@@ -513,76 +555,81 @@ pub fn on_weekdays(self: DateScheduleBuilder) {
 }
 
 /// Shortcut function to set the schedule to trigger on weekends (Saturday and Sunday).
-pub fn on_weekends(self: DateScheduleBuilder) {
+pub fn on_weekends(self: ScheduleBuilder) {
   self |> on_saturdays |> on_sundays
 }
 
 /// Validate and create Schedule from scheduleBuilder 
 pub fn build_schedule(
-  schedule: DateScheduleBuilder,
+  schedule_in: ScheduleBuilder,
 ) -> Result(Schedule, DateError) {
-  // Validate each second constraint 
-  use second <- result.try(
-    time_value_in_range(schedule.second, within_range(_, "Seconds", 0, 60)),
-  )
-  // Validate each minute constraint 
-  use minute <- result.try(
-    time_value_in_range(schedule.minute, within_range(_, "Minutes", 0, 60)),
-  )
-  // Validate each hour constraint 
-  use hour <- result.try(
-    time_value_in_range(schedule.hour, within_range(_, "Hours", 0, 24)),
-  )
+  case schedule_in {
+    IntervalBuilder(interval) -> Ok(Interval(interval))
+    ScheduleBuilder(schedule) -> {
+      // Validate each second constraint 
+      use second <- result.try(
+        time_value_in_range(schedule.second, within_range(_, "Seconds", 0, 60)),
+      )
+      // Validate each minute constraint 
+      use minute <- result.try(
+        time_value_in_range(schedule.minute, within_range(_, "Minutes", 0, 60)),
+      )
+      // Validate each hour constraint 
+      use hour <- result.try(
+        time_value_in_range(schedule.hour, within_range(_, "Hours", 0, 24)),
+      )
 
-  // Validate each month constraint 
-  use month <- result.try(
-    time_value_in_range(schedule.month, within_range(_, "Month", 1, 12)),
-  )
+      // Validate each month constraint 
+      use month <- result.try(
+        time_value_in_range(schedule.month, within_range(_, "Month", 1, 12)),
+      )
 
-  let has_february = value_exists_in_time_value(2, month)
+      let has_february = value_exists_in_time_value(2, month)
 
-  let has_30_month =
-    [
-      value_exists_in_time_value(4, month),
-      value_exists_in_time_value(6, month),
-      value_exists_in_time_value(9, month),
-      value_exists_in_time_value(11, month),
-    ]
-    |> list.any(function.identity)
+      let has_30_month =
+        [
+          value_exists_in_time_value(4, month),
+          value_exists_in_time_value(6, month),
+          value_exists_in_time_value(9, month),
+          value_exists_in_time_value(11, month),
+        ]
+        |> list.any(function.identity)
 
-  let max_day_of_month = case has_february, has_30_month {
-    True, _ -> 28
-    _, True -> 30
-    _, _ -> 31
+      let max_day_of_month = case has_february, has_30_month {
+        True, _ -> 28
+        _, True -> 30
+        _, _ -> 31
+      }
+
+      // Validate each day_of_month constraint 
+      use day_of_month <- result.try(
+        time_value_in_range(schedule.day_of_month, within_range(
+          _,
+          "Day of month",
+          1,
+          max_day_of_month,
+        )),
+      )
+      // Validate each day_of_week constraint 
+      use day_of_week <- result.map(
+        time_value_in_range(schedule.day_of_week, within_range(
+          _,
+          "Day of week",
+          1,
+          7,
+        )),
+      )
+
+      DateSchedule(second:, minute:, hour:, day_of_month:, month:, day_of_week:)
+      |> Schedule
+    }
   }
-
-  // Validate each day_of_month constraint 
-  use day_of_month <- result.try(
-    time_value_in_range(schedule.day_of_month, within_range(
-      _,
-      "Day of month",
-      1,
-      max_day_of_month,
-    )),
-  )
-  // Validate each day_of_week constraint 
-  use day_of_week <- result.map(
-    time_value_in_range(schedule.day_of_week, within_range(
-      _,
-      "Day of week",
-      1,
-      7,
-    )),
-  )
-
-  DateSchedule(second:, minute:, hour:, day_of_month:, month:, day_of_week:)
-  |> Schedule
 }
 
 // Builder
 //---------------
-pub fn new(worker: jobs.Worker, schedule: Schedule) {
-  Spec(
+pub fn new(worker worker: jobs.Worker, schedule schedule: ScheduleBuilder) {
+  SpecBuilder(
     schedule,
     worker,
     max_retries: 3,
@@ -595,30 +642,46 @@ pub fn new(worker: jobs.Worker, schedule: Schedule) {
 /// Maximum times a job will be retried before being considered failed
 /// and moved to the failed_jobs table
 ///
-pub fn with_max_retries(spec: Spec, max_retries: Int) {
-  Spec(..spec, max_retries:)
+pub fn with_max_retries(spec: SpecBuilder, max_retries: Int) {
+  SpecBuilder(..spec, max_retries:)
 }
 
 /// Amount of time in milli seconds the queue is given to start
 ///
-pub fn with_init_timeout(spec: Spec, init_timeout: Int) {
-  Spec(..spec, init_timeout:)
+pub fn with_init_timeout(spec: SpecBuilder, init_timeout: Int) {
+  SpecBuilder(..spec, init_timeout:)
 }
 
 /// Time in milli seconds to wait in between checking for new jobs
 ///
-pub fn with_poll_interval_ms(spec: Spec, poll_interval: Int) {
-  Spec(..spec, poll_interval:)
+pub fn with_poll_interval_ms(spec: SpecBuilder, poll_interval: Int) {
+  SpecBuilder(..spec, poll_interval:)
 }
 
 /// Set event listeners for the queue
 /// NOTE: This will override previously added workers
 ///
 pub fn with_event_listeners(
-  spec: Spec,
+  spec: SpecBuilder,
   event_listeners: List(events.EventListener),
 ) {
-  Spec(..spec, event_listeners:)
+  SpecBuilder(..spec, event_listeners:)
+}
+
+@internal
+pub fn validate(spec_builder: SpecBuilder) -> Result(Spec, errors.BgJobError) {
+  use schedule <- result.map(
+    build_schedule(spec_builder.schedule_builder)
+    |> result.map_error(to_bg_jobs_error),
+  )
+  Spec(
+    schedule:,
+    worker: spec_builder.worker,
+    max_retries: spec_builder.max_retries,
+    init_timeout: spec_builder.init_timeout,
+    poll_interval: spec_builder.poll_interval,
+    event_listeners: spec_builder.event_listeners,
+  )
 }
 
 pub fn build(db_adapter db_adapter: db_adapter.DbAdapter, spec spec: Spec) {

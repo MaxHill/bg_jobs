@@ -6,6 +6,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import gleam/string_builder
+import gleam/string_tree
 import jobs
 import jobs/send_email_job
 import mist
@@ -22,6 +23,8 @@ pub fn main() {
   let assert Ok(bg_jobs) = jobs.setup(conn)
 
   let ctx = Context(bg: bg_jobs, conn:)
+
+  wisp.configure_logger()
 
   let secret_key_base = wisp.random_string(64)
   // Start the Mist web server.
@@ -52,8 +55,6 @@ fn home_page(_req: wisp.Request, ctx: Context) {
     )
     |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
-    |> result.map(result.all)
-    |> result.flatten
 
   case all_jobs {
     Ok(jobs) -> {
@@ -61,14 +62,14 @@ fn home_page(_req: wisp.Request, ctx: Context) {
         list.map(jobs, fn(job) { "<li>" <> string.inspect(job) <> "</li>" })
         |> string.join("")
 
-      wisp.html_response(string_builder.from_string("
+      wisp.html_response(string_tree.from_string("
       <ul>
       " <> job_list <> "
       </ul>
       "), 200)
     }
     Error(_) -> {
-      wisp.html_response(string_builder.from_string("Could not get jobs"), 500)
+      wisp.html_response(string_tree.from_string("Could not get jobs"), 500)
     }
   }
 }

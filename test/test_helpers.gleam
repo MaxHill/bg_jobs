@@ -163,5 +163,6 @@ fn error_to_string(error: errors.BgJobError) {
       <> string.inspect(job_request)
       <> "|workers:"
       <> list.map(workers, fn(w) { w.job_name }) |> string.join(with: "")
+    errors.ScheduleValidationError(e) -> "ScheduleValidationError:" <> e
   }
 }

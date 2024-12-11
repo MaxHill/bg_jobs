@@ -1,9 +1,9 @@
 import bg_jobs
 import bg_jobs/jobs
 import gleam/dynamic
-import gleam/io
 import gleam/json
 import gleam/result
+import wisp
 
 pub const job_name = "SEND_EMAIL"
 
@@ -21,7 +21,7 @@ pub fn handler(job: jobs.Job) {
     |> result.map_error(fn(_e) { "Could not decode payload" }),
   )
 
-  io.debug(
+  wisp.log_notice(
     "Sending email to: " <> payload.to <> " with message: " <> payload.message,
   )
   Ok(Nil)

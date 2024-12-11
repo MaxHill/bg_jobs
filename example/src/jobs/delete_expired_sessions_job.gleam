@@ -1,5 +1,5 @@
 import bg_jobs/jobs
-import gleam/io
+import wisp
 
 pub const job_name = "DELETE_EXPIRED_SESSIONS"
 
@@ -8,6 +8,6 @@ pub fn worker() {
 }
 
 pub fn handler(_: jobs.Job) {
-  io.debug("Deleting expired sessions...")
+  wisp.log_notice("Deleting expired sessions...")
   Ok(Nil)
 }

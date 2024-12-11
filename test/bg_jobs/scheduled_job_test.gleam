@@ -14,27 +14,27 @@ import test_helpers/jobs/log_job_interval
 pub fn test_schedule_intervals() {
   should.equal(
     scheduled_job.new_interval_milliseconds(500),
-    scheduled_job.Interval(scheduled_job.Millisecond(500)),
+    scheduled_job.IntervalBuilder(scheduled_job.Millisecond(500)),
   )
   should.equal(
     scheduled_job.new_interval_seconds(10),
-    scheduled_job.Interval(scheduled_job.Second(10)),
+    scheduled_job.IntervalBuilder(scheduled_job.Second(10)),
   )
   should.equal(
     scheduled_job.new_interval_minutes(5),
-    scheduled_job.Interval(scheduled_job.Minute(5)),
+    scheduled_job.IntervalBuilder(scheduled_job.Minute(5)),
   )
   should.equal(
     scheduled_job.new_interval_hours(2),
-    scheduled_job.Interval(scheduled_job.Hour(2)),
+    scheduled_job.IntervalBuilder(scheduled_job.Hour(2)),
   )
   should.equal(
     scheduled_job.new_interval_days(1),
-    scheduled_job.Interval(scheduled_job.Day(1)),
+    scheduled_job.IntervalBuilder(scheduled_job.Day(1)),
   )
   should.equal(
     scheduled_job.new_interval_weeks(1),
-    scheduled_job.Interval(scheduled_job.Week(1)),
+    scheduled_job.IntervalBuilder(scheduled_job.Week(1)),
   )
 }
 

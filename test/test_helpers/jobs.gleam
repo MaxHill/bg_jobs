@@ -95,34 +95,25 @@ pub fn setup_interval(
     |> bg_jobs.new(db_adapter)
     |> bg_jobs.with_event_listener(logger_event_listner)
     |> bg_jobs.with_scheduled_job(
-      scheduled_job.Spec(
-        schedule: scheduled_job.new_interval_milliseconds(10),
+      scheduled_job.new(
         worker: log_job_interval.worker(logger),
-        max_retries: 2,
-        init_timeout: 1000,
-        poll_interval: 10,
-        event_listeners: [],
-      ),
-    )
-    |> bg_jobs.with_scheduled_job(
-      scheduled_job.Spec(
         schedule: scheduled_job.new_interval_milliseconds(10),
-        worker: failing_job_interval.worker(logger),
-        max_retries: 3,
-        init_timeout: 1000,
-        poll_interval: 10,
-        event_listeners: [],
-      ),
+      )
+      |> scheduled_job.with_poll_interval_ms(10),
     )
     |> bg_jobs.with_scheduled_job(
-      scheduled_job.Spec(
+      scheduled_job.new(
+        worker: failing_job_interval.worker(logger),
+        schedule: scheduled_job.new_interval_milliseconds(10),
+      )
+      |> scheduled_job.with_poll_interval_ms(10),
+    )
+    |> bg_jobs.with_scheduled_job(
+      scheduled_job.new(
         schedule: scheduled_job.new_interval_milliseconds(10),
         worker: forever_job_interval.worker(logger),
-        max_retries: 3,
-        init_timeout: 1000,
-        poll_interval: 10,
-        event_listeners: [],
-      ),
+      )
+      |> scheduled_job.with_poll_interval_ms(10),
     )
     |> bg_jobs.build()
 
@@ -134,7 +125,7 @@ pub fn setup_interval(
 
 pub fn setup_schedule(
   conn: sqlight.Connection,
-  spec: scheduled_job.Spec,
+  spec: scheduled_job.SpecBuilder,
   f: fn(#(bg_jobs.BgJobs, db_adapter.DbAdapter, process.Subject(_))) -> Nil,
 ) {
   let event_logger = test_helpers.new_logger()

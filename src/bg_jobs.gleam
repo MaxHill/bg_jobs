@@ -65,7 +65,7 @@ pub type BgJobsBuilder {
     db_adapter: db_adapter.DbAdapter,
     event_listeners: List(events.EventListener),
     queues: List(queue.Spec),
-    scheduled_jobs: List(scheduled_job.Spec),
+    scheduled_jobs: List(scheduled_job.SpecBuilder),
   )
 }
 
@@ -133,7 +133,7 @@ pub fn with_queue(spec: BgJobsBuilder, queue: queue.Spec) {
 /// ```
 pub fn with_scheduled_job(
   spec: BgJobsBuilder,
-  scheduled_job: scheduled_job.Spec,
+  scheduled_job: scheduled_job.SpecBuilder,
 ) {
   BgJobsBuilder(
     ..spec,
@@ -153,6 +153,13 @@ pub fn with_scheduled_job(
 ///
 /// ````
 pub fn build(spec: BgJobsBuilder) -> Result(BgJobs, errors.BgJobError) {
+  // Validate the scheduled_jobs scehdules and append global event listeners
+  use scheduled_jobs <- result.try(
+    spec.scheduled_jobs
+    |> list.map(scheduled_job.with_event_listeners(_, spec.event_listeners))
+    |> list.try_map(scheduled_job.validate),
+  )
+
   let monitor_table =
     monitor.initialize_named_registries_store(monitor.table_name)
   let all_workers =
@@ -189,11 +196,10 @@ pub fn build(spec: BgJobsBuilder) -> Result(BgJobs, errors.BgJobError) {
   }
   // Add scheduled_jobs
   |> fn(sub_builder) {
-    spec.scheduled_jobs
+    scheduled_jobs
     |> list.map(fn(scheduled_jobs_spec) {
       sup.worker_child(scheduled_jobs_spec.worker.job_name, fn() {
         scheduled_jobs_spec
-        |> scheduled_job.with_event_listeners(spec.event_listeners)
         |> scheduled_job.build(db_adapter: spec.db_adapter, spec: _)
         |> result.map(process.subject_owner)
       })

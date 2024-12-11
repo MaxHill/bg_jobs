@@ -1,5 +1,5 @@
 import bg_jobs/jobs
-import gleam/io
+import wisp
 
 pub const job_name = "CLEANUP_DB"
 
@@ -8,6 +8,6 @@ pub fn worker() {
 }
 
 pub fn handler(_: jobs.Job) {
-  io.debug("Cleaning up the db...")
+  wisp.log_notice("Cleaning up the db...")
   Ok(Nil)
 }
