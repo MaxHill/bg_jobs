@@ -5,6 +5,7 @@ import bg_jobs/internal/monitor
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
 import bg_jobs/internal/utils
 import bg_jobs/jobs
+import gleam/bool
 import gleam/erlang/process
 import gleam/function
 import gleam/int
@@ -152,6 +153,7 @@ pub type DateError {
   DateError(tempo.DateOutOfBoundsError)
   TimeError(tempo.TimeOutOfBoundsError)
   OutOfBoundsError(String)
+  RangeError(String)
 }
 
 pub fn to_bg_jobs_error(date_error: DateError) -> errors.BgJobError {
@@ -160,6 +162,7 @@ pub fn to_bg_jobs_error(date_error: DateError) -> errors.BgJobError {
     OutOfBoundsError(e) ->
       errors.ScheduleValidationError("Schedule is out of bounds: " <> e)
     TimeError(_) -> errors.ScheduleValidationError("Time is out of bounds")
+    RangeError(e) -> errors.ScheduleValidationError("Invalid range: " <> e)
   }
 }
 
@@ -567,21 +570,27 @@ pub fn build_schedule(
     IntervalBuilder(interval) -> Ok(Interval(interval))
     ScheduleBuilder(schedule) -> {
       // Validate each second constraint 
+      use second <- result.try(ranges_are_valid(schedule.second, "Seconds"))
       use second <- result.try(
-        time_value_in_range(schedule.second, within_range(_, "Seconds", 0, 60)),
+        time_value_in_range(second, within_range(_, "Seconds", 0, 60)),
       )
+
       // Validate each minute constraint 
+      use minute <- result.try(ranges_are_valid(schedule.minute, "Minutes"))
       use minute <- result.try(
-        time_value_in_range(schedule.minute, within_range(_, "Minutes", 0, 60)),
+        time_value_in_range(minute, within_range(_, "Minutes", 0, 60)),
       )
+
       // Validate each hour constraint 
+      use hour <- result.try(ranges_are_valid(schedule.hour, "Hours"))
       use hour <- result.try(
-        time_value_in_range(schedule.hour, within_range(_, "Hours", 0, 24)),
+        time_value_in_range(hour, within_range(_, "Hours", 0, 24)),
       )
 
       // Validate each month constraint 
+      use month <- result.try(ranges_are_valid(schedule.month, "Month"))
       use month <- result.try(
-        time_value_in_range(schedule.month, within_range(_, "Month", 1, 12)),
+        time_value_in_range(month, within_range(_, "Month", 1, 12)),
       )
 
       let has_february = value_exists_in_time_value(2, month)
@@ -602,8 +611,13 @@ pub fn build_schedule(
       }
 
       // Validate each day_of_month constraint 
+
+      use day_of_month <- result.try(ranges_are_valid(
+        schedule.day_of_month,
+        "Day of month",
+      ))
       use day_of_month <- result.try(
-        time_value_in_range(schedule.day_of_month, within_range(
+        time_value_in_range(day_of_month, within_range(
           _,
           "Day of month",
           1,
@@ -611,13 +625,12 @@ pub fn build_schedule(
         )),
       )
       // Validate each day_of_week constraint 
+      use day_of_week <- result.try(ranges_are_valid(
+        schedule.day_of_week,
+        "Day of week",
+      ))
       use day_of_week <- result.map(
-        time_value_in_range(schedule.day_of_week, within_range(
-          _,
-          "Day of week",
-          1,
-          7,
-        )),
+        time_value_in_range(day_of_week, within_range(_, "Day of week", 1, 7)),
       )
 
       DateSchedule(second:, minute:, hour:, day_of_month:, month:, day_of_week:)
@@ -1074,6 +1087,34 @@ fn within_range(
         <> ", found: "
         <> int.to_string(v),
       ))
+  }
+}
+
+fn ranges_are_valid(time_value: TimeValue, time_unit: String) {
+  case time_value {
+    Every -> Ok(Every)
+    Specific(list) -> {
+      list.map(list, fn(d) {
+        case d {
+          Value(v) -> Ok(Value(v))
+          Range(start, end) -> {
+            case start < end {
+              True -> Ok(Range(start, end))
+              False ->
+                Error(RangeError(
+                  time_unit
+                  <> ":Range start must be smaller than end, got start:"
+                  <> int.to_string(start)
+                  <> " end:"
+                  <> int.to_string(end),
+                ))
+            }
+          }
+        }
+      })
+      |> result.all()
+      |> result.map(Specific)
+    }
   }
 }
 

@@ -770,3 +770,53 @@ pub fn error_month_with_different_days_test() {
     "Day of month must be between 1 and 30, found: 31",
   ))
 }
+
+pub fn invalid_range_test() {
+  scheduled_job.new_schedule()
+  |> scheduled_job.between_seconds(3, 1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.RangeError(
+    "Seconds:Range start must be smaller than end, got start:3 end:1",
+  ))
+
+  scheduled_job.new_schedule()
+  |> scheduled_job.between_minutes(3, 1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.RangeError(
+    "Minutes:Range start must be smaller than end, got start:3 end:1",
+  ))
+
+  scheduled_job.new_schedule()
+  |> scheduled_job.between_hours(3, 1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.RangeError(
+    "Hours:Range start must be smaller than end, got start:3 end:1",
+  ))
+
+  scheduled_job.new_schedule()
+  |> scheduled_job.between_day_of_months(3, 1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.RangeError(
+    "Day of month:Range start must be smaller than end, got start:3 end:1",
+  ))
+
+  scheduled_job.new_schedule()
+  |> scheduled_job.between_months(3, 1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.RangeError(
+    "Month:Range start must be smaller than end, got start:3 end:1",
+  ))
+
+  scheduled_job.new_schedule()
+  |> scheduled_job.between_day_of_weeks(3, 1)
+  |> scheduled_job.build_schedule()
+  |> should.be_error()
+  |> should.equal(scheduled_job.RangeError(
+    "Day of week:Range start must be smaller than end, got start:3 end:1",
+  ))
+}
