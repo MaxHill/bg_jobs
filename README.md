@@ -21,29 +21,9 @@ Bg_jobs provide the following:
 - *Queues* - including delayed execution
 - *Scheduled jobs* - on an interval or cron like schedule
 
-# Architecture
-*TODO:* expand this section
-
-Program architecture:
-- *otp supervisor*
-  - *otp worker* - queue (0 or more)
-    - Polls the database on specified interval looking for avaliable jobs of the type it can handle
-  - *otp worker* - scheduled jobs queue (0 or more)
-    - Polls the database on specified interval looking for avaliable jobs of the type it can handle
-    - Enqueus a new job with apropriate avalible at after processing is done 
-  - *otp worker* - monitor (1 per program)
-    - Holds Subjects to all workers in bg_jobs. This is used for named lookup
-
-## Durability
-Jobs are claimed with a timestamp and queue/scheduled job name.
-Each queue and scheduled job should have a unique name even across machines.
-Whenever the worker starts up it clears out previously claimed jobs.
-This way if a worker crashes and the supervisor restarts it there is no 
-abandoned jobs.
-
 
 # Time and date
-All dates should be passed in utc+0
+All dates should be passed in UTC+0
 
 # Installation 
 
@@ -86,6 +66,28 @@ pub fn main() {
 This example sets up a `default_queue` to handle `example_worker` jobs. 
 When a job with the payload "Hello!" is dispatched, it is stored in the 
 database, picked up by the queue, and logged.
+
+# Architecture
+*TODO:* expand this section
+
+Program architecture:
+- *otp supervisor*
+  - *otp worker* - queue (0 or more)
+    - Polls the database on specified interval looking for avaliable jobs of the type it can handle
+  - *otp worker* - scheduled jobs queue (0 or more)
+    - Polls the database on specified interval looking for avaliable jobs of the type it can handle
+    - Enqueus a new job with apropriate avalible at after processing is done 
+  - *otp worker* - monitor (1 per program)
+    - Holds Subjects to all workers in bg_jobs. This is used for named lookup
+
+## Durability
+TODO: update, this is not exactly correct any more..
+~~Jobs are claimed with a timestamp and queue/scheduled job name.
+Each queue and scheduled job should have a unique name even across machines.
+Whenever the worker starts up it clears out previously claimed jobs.
+This way if a worker crashes and the supervisor restarts it there is no 
+abandoned jobs.~~
+
 
 # Supervisor Integration in bg_jobs
 
