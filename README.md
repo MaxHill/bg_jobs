@@ -2,6 +2,9 @@
 [![Package Version](https://img.shields.io/hexpm/v/bg_jobs)](https://hex.pm/packages/bg_jobs)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/bg_jobs/)
 
+# Docs are WIP right now
+Most of it is correct but not complete, some parts are duplicated.
+
 # What is bg_jobs
 When developing web applications, certain tasks, like processing large files or 
 performing heavy calculations can slow down regular request handling. 
@@ -549,10 +552,7 @@ just watch-test # Run tests in watch mode
 ```
 
 # TODO
-- [x] Rename duration to clock / time something like that 
-- [x] Look over the public api so it makes sense
-- [x] Make events module public
-- [ ] Document architecture
-- [ ] Document scheduling
+- [ ] Documentation
 - [ ] Split db adapters to their own packages
-  Need to solve testing, since the tests depend on sqlite
+  - Need to solve testing, since the tests depend on sqlite
+- [ ] Implement loop in monitor actor to cover the case where down message was not received
