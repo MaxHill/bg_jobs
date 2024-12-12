@@ -2,7 +2,6 @@ import bg_jobs
 import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/utils
-import gleam/io
 import gleam/list
 import gleam/result
 import gleam/string

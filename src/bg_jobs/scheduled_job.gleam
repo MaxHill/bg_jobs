@@ -5,7 +5,6 @@ import bg_jobs/internal/monitor
 import bg_jobs/internal/scheduled_jobs_messages.{type Message} as messages
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import gleam/bool
 import gleam/erlang/process
 import gleam/function
 import gleam/int
