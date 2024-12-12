@@ -84,27 +84,102 @@ This example sets up a `default_queue` to handle `example_worker` jobs.
 When a job with the payload "Hello!" is dispatched, it is stored in the 
 database, picked up by the queue, and logged.
 
-# supervisor
-Todo - describe that supervisor is passed in making it possible to customize it.
-Example of how to supervise the bg_jobs
+# Supervisor Integration in bg_jobs
 
-# Monitor
-The monitor process monitors all queues and scheduled jobs actors using the 
-`process.monitor_process()` method from `gleam/erlang/process`. 
-If a queue or scheduled job dies a process down signal is sent to the monitor 
-and the monitor releases all reservations made by that queue or scheduled job 
-in the database. This enables a another (or the same when restarted) to 
-claim and process the job.
+bg_jobs is an OTP-based job scheduling system that integrates with 
+Erlang’s supervision tree. When setting up bg_jobs, you need to pass 
+a `static_supervisor.Builder` along with a db_adapter. This provides 
+flexibility, allowing you to configure the supervisor's settings 
+before passing it into bg_jobs. You can also choose to supervise the 
+created supervisor itself.
 
-*To be implemented:* Should something go wrong and this message is 
-not received the monitor also periodically loops through the 
-reserved jobs in the database (configurable with: some_fn looking 
-for jobs reserved dead processes and releases their reservation.
+## Configuring the Supervisor for bg_jobs
 
-Should the manager itself die all queue and schedule job processes 
-are stored in an ETS table and on restart the monitor performs a 
-cleanup where it releases all jobs where the reserving process is 
-dead aswell as starting to monitor the alive processes again.
+To set custom parameters for the bg_jobs supervisor, you need to 
+first create the supervisor with the desired strategy and 
+configuration settings. 
+
+**Example 1: Setting restart_tolerance for the bg_jobs Supervisor**
+You can configure the restart_tolerance setting for the supervisor, 
+which determines how many restarts are tolerated in a given time 
+window before the supervisor itself is terminated.
+```gleam
+static_supervisor.new(static_supervisor.OneForOne)   // Create a new supervisor with the OneForOne strategy
+|> static_supervisor.restart_tolerance(10, 1)  // Set restart tolerance to 10 restarts in 1 second
+|> bg_jobs.new(db_adapter)  // Create a new bg_jobs instance with the specified db_adapter
+|> bg_jobs.build()  // Build and start the bg_jobs supervision tree
+```
+In this example:
+- `sup.new(sup.OneForOne)` creates a new supervisor with the OneForOne strategy.
+- `sup.restart_tolerance(100, 1)` configures the supervisor to tolerate 100 restarts within a 1-second window.
+- `bg_jobs.new(db_adapter)` creates a new instance of bg_jobs, passing in the necessary db_adapter.
+- `bg_jobs.build()` builds and starts the bg_jobs system under the supervision tree.
+
+**Example 2: Supervising the bg_jobs Supervisor**
+You can also add the bg_jobs supervisor as a child to another 
+supervisor, allowing you to control its lifecycle and supervise it 
+as part of your system.
+```gleam
+fn setup_bg_jobs() -> Result(bg_jobs.BgJobs, errors.BgJobError) {
+  // Define how the bg_jobs supervisor is set up
+  todo
+}
+
+static_supervisor.new(sup.OneForOne)   // Create a new supervisor with the OneForOne strategy
+|> static_supervisor.add(static_supervisor.supervisor_child("bg_jobs", fn() {  // Add the bg_jobs supervisor as a child
+  setup_bg_jobs()  // Set up bg_jobs
+    |> result.map(fn(bg) { bg.supervisor })  // Map the result to return the supervisors pid
+}))
+```
+In this example:
+- `sup.new(sup.OneForOne)` creates a new supervisor with the OneForOne strategy.
+- `sup.add(sup.supervisor_child("bg_jobs", fn() { ... }))` adds the bg_jobs supervisor as a child of the main supervisor.
+- `setup_bg_jobs()` contains the logic for setting up the bg_jobs system, which could include creating job schedulers and configuring database adapters.
+- `result.map(fn(bg) { bg.supervisor })` ensures that the supervisor for the bg_jobs system is returned and supervised correctly.
+
+---
+# Monitor Process in bg_jobs
+
+The Monitor process in bg_jobs is responsible for overseeing the 
+health of all queues and scheduled job actors. It ensures that if 
+any job or queue process dies unexpectedly, the corresponding 
+reservation in the database is released, allowing other processes to 
+reserve and process the job.
+## How it works
+
+### Monitoring Process Lifecycle
+- The monitor process uses `process.monitor_process()` from `gleam/erlang/
+  process` to track all queues and scheduled job 
+  actors.
+- If a queue or scheduled job process dies, the monitor receives a 
+  process down signal.
+- Upon receiving this signal, the monitor will release all 
+  reservations made by that queue or job in the database. This makes 
+  the job available for re-claiming.
+
+### Periodic Job Reservation Cleanup (Not implemented yet)
+- In cases where the monitor doesn't receive a process down signal 
+  (e.g., if the signal is missed or delayed), it periodically loops 
+  through reserved jobs in the database. 
+- The monitor looks for jobs associated with dead processes, and 
+  releases their reservation, allowing these jobs to be claimed again 
+  by a new process. 
+- The cleanup frequency is configurable, meaning you can define how 
+  often the monitor checks for reserved jobs with dead processes. This 
+  can be done using the configurable function some_fn().
+
+
+### Handling Monitor Failures
+- If the monitor itself dies, it’s designed to be fault-tolerant. 
+  All queue and scheduled job processes are stored in an ETS (Erlang 
+  Term Storage) table.
+- Upon restart, the monitor performs a cleanup operation, where it 
+  releases reservations for jobs that were associated with dead 
+  processes.
+- After cleanup, the monitor resumes its normal function by 
+  restarting monitoring of the remaining alive processes.
+
+---
 
 # Queue
 Each queue that you add to the bg_jobs program spawns an `erlang/otp/
@@ -167,69 +242,226 @@ be the next processing time the job wont run that time.
 
 For example if a job starts 13:30 and should run every minute the 
 next run time would be 13:31. But if the job execution takes 1min 
-30sec. the next run will be at 13:31 since it's only rescheduled 
+30sec. the next run will be at 13:32 since it's only rescheduled 
 after it completes.
 
-## Schedules
+# Schedules
 Schedules for scheduled jobs can be specified in two ways. 
 As an interval or as a cron-like schedule
 
-TODO: continue here..
-Scheduled jobs can be in two states executing or waiting. It's 
-I want to say all jobs start with pausing, meaning a interval 
-of every hour will start by waiting for an hour and then execute.
-Maybe this should be under interval schedules.
+Scheduled jobs are either executing or waiting to be executed. Since 
+the job's next run is calculated on startup the first thing it does 
+is wait.
+However if there already is a scheduled job when the actor starts it 
+will do nothing and wait for that job to become available.
 
-## Interval schedules
-  kk
+## Intervals 
+Intervals is the simplest for of schedules provided. Intervals can 
+be specified in millieseconds, seconds, minutes, hours , days or 
+weeks. This is done using the corresponding 
+`scheduled_job.new_interval_[ time unit]()` functions, ex. 
+`scheduled_job.new_interval_minutes(20)` would create a new interval 
+of 20 minutes.
+Execution time is not included in the interval. This means, what you're 
+really setting, is how far in the future the job should be scheduled 
+for. 
 
+TODO: diagram
+
+## Schedules
+Sometimes you need to have more advanced schedules. For example you 
+may want a job run on the first day of the month at 08:30, or
+on thursdays between the months march and june.
+
+This can be achieved using schedules. Schedules allows you to 
+specify cron-like schedules ranges or specific values.
+
+To achieve this flexibility, schedules are defined by configuring the 
+following time components:
+- Seconds: (Default: 0)
+- Minutes: (Default: Every)
+- Hours: (Default: Every)
+- Day of the Month: (Default: Every)
+- Month: (Default: Every)
+- Day of the Week: (Default: Every)
+
+Each component can be set to:
+*Every:* Matches all possible values for that component.
+*List:* A combination of:
+ - Specific values (e.g., seconds 0, 15, 30).
+ - Ranges (e.g., hours from 1 to 10).
+Using List, you can mix specific values and ranges, allowing highly customized schedules.
+
+### Behavior of Every
+Setting a component to Every means it matches all possible values for that component. For example:
+>Setting hours to Every will trigger the job at any hour, as long as other time units match their criteria.
+---
+### Schedule Validation
+
+Schedules are validated when the bg_jobs framework is built. If a 
+schedule is invalid, a ScheduleValidationError is raised, preventing 
+the application from starting with an incorrect schedule configuration.
+
+
+**Common Validation Errors**
+An invalid schedule can occur if:
+- A specified value is out of bounds for the time unit.
+  - Example: Scheduling a job for the 13th month, which does not exist.
+- A range is incorrectly defined (e.g., start is greater than end).
+  - Example: A between_seconds(50, 30) call would trigger an error.
+
+*Handling Validation Errors*
+If the schedule is invalid a ScheduleValidationError is returned and 
+will stop the creation of bg_jobs, returning said error. The error 
+message will provide details about the issue.
+
+---
+### ScheduleBuilder Functions
+The ScheduleBuilder provides a series of methods to configure each time component.
+*Creating a New Schedule*
+```gleam
+pub fn new_schedule() -> ScheduleBuilder
+```
+Creates a new schedule with the default configuration: triggers at the first second of every minute.
+
+---
+### Configuring Seconds
+*every_second*
+```gleam
+pub fn every_second(self: ScheduleBuilder) -> ScheduleBuilder
+```
+Sets the schedule to trigger at every second.
+
+*on_second*
+```gleam
+pub fn on_second(self: ScheduleBuilder, second: Int) -> ScheduleBuilder
+```
+Adds a specific second to the schedule. If other seconds are already 
+defined, this appends the new value.
+
+*Example:*
+```gleam
+schedule.on_second(1).on_second(10);
+// Triggers at second 1 or 10.
+```
+
+*between_seconds*
+```gleam
+pub fn between_seconds(self: ScheduleBuilder, start: Int, end: Int) -> ScheduleBuilder
+```
+Adds a range of seconds during which the schedule should trigger. If other seconds or ranges are already defined, this appends the range.
+
+
+Example:
+```gleam
+schedule.on_second(1).between_seconds(10, 15);
+// Triggers at second 1 or seconds 10–15.
+```
+
+---
+
+### Combining Filters
+Filters across time units are combined using AND logic. For example:
+```gleam
+let schedule = new_schedule()
+    .on_second(1)
+    .between_seconds(10, 15)
+    .on_minute(30)
+    .on_hour(8)
+    .between_hours(14, 16)
+    .on_thursdays()
+    .between_months(3, 6);
+```
+This schedule will trigger only when:
+- The second is 1 **or** within the range 10–15, **and**
+- The minute is 30, **and**
+- The hour is 8 **or** between 14:00–16:00, **and**
+- It is Thursday, **and**
+- It is during March through June.
+
+--- 
+### Practical Example
+Here’s a complete example demonstrating both OR and AND logic:
+
+```gleam
+let schedule = new_schedule()
+    .on_second(1)
+    .on_second(10)
+    .between_seconds(30, 40)
+    .on_minute(15)
+    .on_minute(45)
+    .on_hour(3)
+    .between_hours(10, 12)
+    .on_mondays() 
+    .on_januaries()
+    .on_decembers();
+```
+This schedule will trigger only when:
+- The second is 1, 10, **or** between 30–40, **and**
+- The minute is 15 **or** 45, **and**
+- The hour is 3 **or** between 10–12, **and**
+- It is Monday, **and**
+- It is January **or** December.
+
+---
+### Summary
+
+The ScheduleBuilder provides a powerful and flexible way to define schedules:
+- **OR logic within each time unit** allows combining multiple specific values and ranges.
+- **AND logic across time units** ensures precise scheduling, requiring all units to match their criteria simultaneously. This design makes it easy to express even the most complex scheduling requirements.
+
+
+
+---
+Schedules are validated when bg_jobs is built. resulting in a `
+ScheduleValidationError` if the schedule is invalid. An example of 
+an invalid scehdule is trying to schedule something for month 13 
+which does not exist.
+
+
+---
+# Old docs..
 # Core Components 
 ## BgJobs
+TODO: rewrite
 BgJobs is the main entry point for setting up background job 
-processing. This instance manages queues, scheduled jobs, and event 
-listeners. After initialization, all interactions with bg_jobs are 
-performed through this instance.
+processing. This starts the otp supervision tree with all the queue, 
+scheduled jobs and monitor actors that where specified.
 
-Setup with configurable options:
+Setup example:
 ```gleam
-  let bg = bg_jobs.new(db_adapter)
-  |> with_supervisor_max_frequency(5)
-  |> with_supervisor_frequency_period(1)
-  // Event listeners
-  |> bg_jobs.with_event_listener(logger_event_listener.listner)
-  // Queues
-  |> bg_jobs.with_queue(queue.new("default_queue"))
-  // Scheduled jobs 
-  |> bg_jobs.with_scheduled_job(scheduled_job.new(
-    cleanup_db_job.worker(),
-    scheduled_job.interval_minutes(1),
-  )) 
-  |> bg_jobs.build()
+  let bg = 
+    static_supervisor.new(static_supervisor.OneForOne)
+    |> bg_jobs.new(db_adapter)
+    // Event listeners
+    |> bg_jobs.with_event_listener(logger_event_listener.listner)
+    // Queues
+    |> bg_jobs.with_queue(queue.new("default_queue"))
+    // Scheduled jobs 
+    |> bg_jobs.with_scheduled_job(scheduled_job.new(
+      worker: cleanup_db_job.worker(),
+      schedule: scheduled_job.interval_minutes(1),
+    )) 
+    |> bg_jobs.build()
 ```
 
 ## Queues
+TODO: rewrite
 Queues handle the processing of jobs in the background. They poll the 
 database at a specified interval and pick up jobs that are ready for 
-processing. Jobs are routed to the appropriate workers based on the job 
+processing. Jobs are picked up by the appropriate queue actor based on the job 
 name, and each queue can be customized for job concurrency, polling 
 interval, retries, and worker configuration.
 
-Queue setup with configurable options:
+Queue setup example:
 ```gleam
-  queue.new(queue_name)
-  |> queue.with_max_concurrent_jobs(10)
-  |> queue.with_poll_interval_ms(100)
-  |> queue.with_max_concurrent_jobs(10)
-  |> queue.with_max_retries(3)
-  |> queue.with_init_timeout(1000)
-  |> queue.with_workers([...])
+  queue.new("example_queue")
   |> queue.with_worker(...)
-  |> queue.with_event_listeners([...])
-  |> queue.with_event_listener(...)
   |> queue.build()
 ```
 
 ## Scheduled jobs
+TODO: rewrite
 Scheduled jobs are jobs that run on a predefined schedule, either at a 
 fixed interval (e.g., every 5 minutes) or a more complex schedule (e.g
 ., cron-like schedules). They self-manage their scheduling, calculating 
@@ -284,10 +516,10 @@ following signature:
 pub type EventListener = fn(Event) -> Nil
 ```
 
-This function will be called whenever an event occurs, receiving an Event 
-object as its parameter. You can then pass your custom listener to 
-bg_jobs (global listener), a specific queue, or a scheduled job as 
-needed.
+If it's registered, this function will be called whenever an event 
+occurs, receiving an Event object as its parameter. You can  
+register your custom listener with bg_jobs (global listener), a queue,
+or a scheduled job as needed.
 
 Example of adding a custom event listener to a specific queue:
 ```gleam
