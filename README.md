@@ -303,10 +303,9 @@ Setting a component to Every means it matches all possible values for that compo
 ---
 ### Schedule Validation
 
-Schedules are validated when the bg_jobs framework is built. If a 
-schedule is invalid, a ScheduleValidationError is raised, preventing 
+Schedules are validated when the bg_jobs framework is started. If a 
+schedule is invalid, a `ScheduleValidationError` is raised, preventing 
 the application from starting with an incorrect schedule configuration.
-
 
 **Common Validation Errors**
 An invalid schedule can occur if:
@@ -415,93 +414,7 @@ The ScheduleBuilder provides a powerful and flexible way to define schedules:
 - **OR logic within each time unit** allows combining multiple specific values and ranges.
 - **AND logic across time units** ensures precise scheduling, requiring all units to match their criteria simultaneously. This design makes it easy to express even the most complex scheduling requirements.
 
-
-
 ---
-Schedules are validated when bg_jobs is built. resulting in a `
-ScheduleValidationError` if the schedule is invalid. An example of 
-an invalid scehdule is trying to schedule something for month 13 
-which does not exist.
-
-
----
-# Old docs..
-# Core Components 
-## BgJobs
-TODO: rewrite
-BgJobs is the main entry point for setting up background job 
-processing. This starts the otp supervision tree with all the queue, 
-scheduled jobs and monitor actors that where specified.
-
-Setup example:
-```gleam
-  let bg = 
-    static_supervisor.new(static_supervisor.OneForOne)
-    |> bg_jobs.new(db_adapter)
-    // Event listeners
-    |> bg_jobs.with_event_listener(logger_event_listener.listner)
-    // Queues
-    |> bg_jobs.with_queue(queue.new("default_queue"))
-    // Scheduled jobs 
-    |> bg_jobs.with_scheduled_job(scheduled_job.new(
-      worker: cleanup_db_job.worker(),
-      schedule: scheduled_job.interval_minutes(1),
-    )) 
-    |> bg_jobs.build()
-```
-
-## Queues
-TODO: rewrite
-Queues handle the processing of jobs in the background. They poll the 
-database at a specified interval and pick up jobs that are ready for 
-processing. Jobs are picked up by the appropriate queue actor based on the job 
-name, and each queue can be customized for job concurrency, polling 
-interval, retries, and worker configuration.
-
-Queue setup example:
-```gleam
-  queue.new("example_queue")
-  |> queue.with_worker(...)
-  |> queue.build()
-```
-
-## Scheduled jobs
-TODO: rewrite
-Scheduled jobs are jobs that run on a predefined schedule, either at a 
-fixed interval (e.g., every 5 minutes) or a more complex schedule (e.g
-., cron-like schedules). They self-manage their scheduling, calculating 
-the next run time after each execution. A scheduled job will become available 
-once it reaches the specified time, but when it runs may depend on 
-queue availability.
-
-Scheduled job options:
-- Interval Scheduling: Jobs run at a regular interval, for example every minute.
-- Cron-like Scheduling: Supports complex scheduling, where you can set 
-  specific execution times.
-
-Intervall scheduled job: 
-```gleam
-// Interval-based job that runs every minute
-scheduled_job.new(
-    cleanup_db_job.worker(),
-    scheduled_job.interval_minutes(1)
-  )
-
-// Cron-like schedule to run at the 10th second and 10th minute of every hour
-scheduled_job.new(
-    delete_expired_sessions_job.worker(),
-    scheduled_job.Schedule(
-      scheduled_job.new_schedule()
-      |> scheduled_job.on_second(10)
-      |> scheduled_job.on_minute(10)
-    )
-  )
-```
-*Note*: The scheduled time is when the job becomes available to the 
-queue, but the exact run time depends on the scheduled_jobs polling 
-interval and speed
-
-
 ## Event Listeners
 bg_jobs generates events during job processing, which can be used for 
 logging, monitoring, or custom telemetry. An event listener can be 

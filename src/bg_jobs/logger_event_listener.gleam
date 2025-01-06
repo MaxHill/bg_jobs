@@ -11,84 +11,59 @@ import tempo/naive_datetime
 /// Listen to events and logg them using the [logging](https://hexdocs.pm/logging/) library
 ///
 pub fn listner(event: events.Event) {
-  let now = naive_datetime.now_utc() |> naive_datetime.to_string()
   case event {
     events.JobEnqueuedEvent(job) ->
-      logging.log(Info, now <> "|JobEnqueued|job_name:" <> job.name)
+      logging.log(Info, "JobEnqueued|job_name:" <> job.name)
     events.JobFailedEvent(queue_name, job) ->
       logging.log(
         Info,
-        now
-          <> "|JobFailed|queue_name:"
-          <> queue_name
-          <> "|job_name:"
-          <> job.name,
+        "JobFailed|queue_name:" <> queue_name <> "|job_name:" <> job.name,
       )
     events.JobReservedEvent(queue_name, job) ->
       logging.log(
         Info,
-        now
-          <> "|JobReserved|queue_name:"
-          <> queue_name
-          <> "|job_name:"
-          <> job.name,
+        "JobReserved|queue_name:" <> queue_name <> "|job_name:" <> job.name,
       )
     events.JobStartEvent(queue_name, job) ->
       logging.log(
         Info,
-        now <> "|JobStart|queue_name:" <> queue_name <> "|job_name:" <> job.name,
+        "JobStart|queue_name:" <> queue_name <> "|job_name:" <> job.name,
       )
     events.JobSucceededEvent(queue_name, job) ->
       logging.log(
         Info,
-        now
-          <> "|JobSucceeded|queue_name:"
-          <> queue_name
-          <> "|job_name:"
-          <> job.name,
+        "JobSucceeded|queue_name:" <> queue_name <> "|job_name:" <> job.name,
       )
     events.QueueErrorEvent(queue_name, error) ->
       logging.log(
         logging.Error,
-        now
-          <> "|QueueError|queue_name:"
+        "QueueError|queue_name:"
           <> queue_name
-          <> "|job_name:"
+          <> "|error:"
           <> error_to_string(error),
       )
     events.QueuePollingStartedEvent(queue_name) ->
-      logging.log(Info, now <> "|QueuePollingStarted|queue_name:" <> queue_name)
+      logging.log(Info, "QueuePollingStarted|queue_name:" <> queue_name)
     events.QueuePollingStopedEvent(queue_name) ->
-      logging.log(Info, now <> "|QueuePollingStoped|queue_name:" <> queue_name)
+      logging.log(Info, "QueuePollingStoped|queue_name:" <> queue_name)
     events.DbQueryEvent(sql, attributes) ->
       logging.log(
         Debug,
-        now
-          <> "|DbQueryEvent|sql:"
+        "DbQueryEvent|sql:"
           <> sql
           <> "|attributes:"
           <> string.inspect(attributes),
       )
     events.DbResponseEvent(response) ->
-      logging.log(Debug, now <> "|DbResponseEvent|response:" <> response)
+      logging.log(Debug, "DbResponseEvent|response:" <> response)
     events.DbErrorEvent(error) ->
-      logging.log(
-        Error,
-        now <> "|DbErrorEvent|response:" <> error_to_string(error),
-      )
+      logging.log(Error, "DbErrorEvent|response:" <> error_to_string(error))
     events.SetupErrorEvent(error) ->
-      logging.log(
-        Error,
-        now <> "|SetupErrorEvent|error: " <> string.inspect(error),
-      )
+      logging.log(Error, "SetupErrorEvent|error: " <> string.inspect(error))
     events.DbEvent(event, input) ->
       logging.log(
-        Error,
-        now
-          <> "|DbEvent|"
-          <> event
-          <> "|input:"
-          <> string.join(input, with: ","),
+        Debug,
+        "DbEvent|" <> event <> "|input:" <> string.join(input, with: ","),
       )
     events.MigrateDownComplete -> logging.log(Info, "MigrateDownComplete")
     events.MigrateUpComplete -> logging.log(Info, "MigrateUpComplete")

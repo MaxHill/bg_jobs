@@ -10,7 +10,7 @@ repository = { type = "github", user = "MaxHill", repo = "bg_jobs" }
 gleam_stdlib = ">= 0.47.0 and < 1.0.0"
 gleam_otp = ">= 0.12.0 and < 1.0.0"
 gleam_erlang = ">= 0.26.0 and < 1.0.0"
-gleam_json = ">= 1.0.1 and < 2.0.0"
+gleam_json = ">= 2.0.0 and < 3.0.0"
 youid = ">= 1.2.0 and < 2.0.0"
 decode = ">= 0.2.1 and < 1.0.0"
 singularity = ">= 0.1.1 and < 1.0.0"

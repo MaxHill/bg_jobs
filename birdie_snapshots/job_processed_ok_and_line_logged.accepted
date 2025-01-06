@@ -1,7 +1,0 @@
----
-version: 1.2.3
-title: Job processed Ok and line logged
-file: ./test/bg_jobs/queue_test.gleam
-test_name: explore_test
----
-["test message"]
