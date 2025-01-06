@@ -1,5 +1,5 @@
 name = "bg_jobs"
-version = "0.5.0"
+version = "0.5.1"
 gleam = ">= 1.6.0"
 
 description = "Background job processing for your Gleam app"
