@@ -4,8 +4,7 @@ import bg_jobs/events
 import bg_jobs/internal/postgres_db_adapter/sql
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import decode/zero
-import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option
@@ -16,7 +15,7 @@ import tempo/naive_datetime
 import youid/uuid
 
 /// Create a new postgres_db_adapter
-/// 
+///
 pub fn new(conn: pog.Connection, event_listners: List(events.EventListener)) {
   let send_event = events.send_event(event_listners, _)
   db_adapter.DbAdapter(
@@ -54,9 +53,9 @@ fn timestamp_to_erlang(timestamp: pog.Timestamp) {
   #(#(year, month, day), #(hour, minute, seconds))
 }
 
-/// If a job succeeds within the retries, this function 
+/// If a job succeeds within the retries, this function
 /// will be called and move the job to the succeeded jobs table
-/// 
+///
 fn move_job_to_succeeded(conn: pog.Connection, send_event: events.EventListener) {
   fn(job: jobs.Job) {
     pog.transaction(conn, fn(conn) {
@@ -96,9 +95,9 @@ fn move_job_to_succeeded(conn: pog.Connection, send_event: events.EventListener)
   }
 }
 
-/// If a job fails and cannot complete within the retries this function 
+/// If a job fails and cannot complete within the retries this function
 /// will be called and move the job to the faild jobs table
-/// 
+///
 fn move_job_to_failed(conn: pog.Connection, send_event: events.EventListener) {
   fn(job: jobs.Job, exception: String) {
     pog.transaction(conn, fn(conn) {
@@ -175,7 +174,7 @@ fn get_succeeded_jobs(conn: pog.Connection, send_event: events.EventListener) {
 }
 
 /// Get all failed jobs.
-/// 
+///
 fn get_failed_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
     send_event(events.DbEvent("get_failed_jobs", [int.to_string(limit)]))
@@ -211,7 +210,7 @@ fn get_failed_jobs(conn: pog.Connection, send_event: events.EventListener) {
 }
 
 /// Sets claimed_at and claimed_by and return the job to be processed.
-/// 
+///
 fn reserve_jobs(conn: pog.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
@@ -236,8 +235,8 @@ fn reserve_jobs(conn: pog.Connection, send_event: events.EventListener) {
             FROM jobs
            WHERE name IN (" <> job_names_sql <> ")
              AND available_at <= $3
-             AND reserved_at IS NULL  
-        ORDER BY available_at ASC  
+             AND reserved_at IS NULL
+        ORDER BY available_at ASC
            LIMIT $4
            FOR UPDATE SKIP LOCKED
       )
@@ -256,7 +255,7 @@ fn reserve_jobs(conn: pog.Connection, send_event: events.EventListener) {
       ])
 
     pog.query(sql)
-    |> pog.returning(decode_enqueued_db_row)
+    |> pog.returning(decode_enqueued_db_row())
     |> list.fold(arguments, _, pog.parameter)
     |> pog.execute(conn)
     |> result.map_error(string.inspect)
@@ -546,7 +545,7 @@ pub fn migrate_up(conn: pog.Connection) {
     CREATE TABLE IF NOT EXISTS jobs (
       id VARCHAR PRIMARY KEY NOT NULL,
       name VARCHAR NOT NULL,
-      payload TEXT NOT NULL, 
+      payload TEXT NOT NULL,
       attempts INTEGER NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
       available_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -565,7 +564,7 @@ pub fn migrate_up(conn: pog.Connection) {
     CREATE TABLE IF NOT EXISTS jobs_failed (
       id VARCHAR PRIMARY KEY NOT NULL,
       name VARCHAR NOT NULL,
-      payload TEXT NOT NULL, 
+      payload TEXT NOT NULL,
       attempts INTEGER NOT NULL,
       exception VARCHAR NOT NULL,
       created_at TIMESTAMP NOT NULL,
@@ -585,7 +584,7 @@ pub fn migrate_up(conn: pog.Connection) {
     CREATE TABLE IF NOT EXISTS jobs_succeeded (
       id VARCHAR PRIMARY KEY NOT NULL,
       name VARCHAR NOT NULL,
-      payload TEXT NOT NULL, 
+      payload TEXT NOT NULL,
       attempts INTEGER NOT NULL,
       created_at TIMESTAMP NOT NULL,
       available_at TIMESTAMP NOT NULL,
@@ -631,93 +630,88 @@ pub fn migrate_down(conn: pog.Connection) {
 }
 
 @internal
-pub fn decode_enqueued_db_row(data: dynamic.Dynamic) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use created_at <- zero.field(4, timestamp_decoder())
-    use available_at <- zero.field(5, timestamp_decoder())
-    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
-    use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(jobs.Job(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at: timestamp_to_erlang(created_at),
-      available_at: timestamp_to_erlang(available_at),
-      reserved_at: reserved_at |> option.map(timestamp_to_erlang),
-      reserved_by:,
-    ))
-  }
+pub fn decode_enqueued_db_row() {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use payload <- decode.field(2, decode.string)
+  use attempts <- decode.field(3, decode.int)
+  use created_at <- decode.field(4, timestamp_decoder())
+  use available_at <- decode.field(5, timestamp_decoder())
+  use reserved_at <- decode.field(6, decode.optional(timestamp_decoder()))
+  use reserved_by <- decode.field(7, decode.optional(decode.string))
+  decode.success(jobs.Job(
+    id:,
+    name:,
+    payload:,
+    attempts:,
+    created_at: timestamp_to_erlang(created_at),
+    available_at: timestamp_to_erlang(available_at),
+    reserved_at: reserved_at |> option.map(timestamp_to_erlang),
+    reserved_by:,
+  ))
+}
 
-  zero.run(data, decoder)
+// fn pog_timestamp_erl_decoder() -> decode.Decoder(#(#(Int, Int, Int), #(Int, Int, Int))) {
+//   pog.timestamp_decoder()
+//   |> decode.map(timestamp_to_erlang)
+// }
+
+@internal
+pub fn decode_succeeded_db_row() {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use payload <- decode.field(2, decode.string)
+  use attempts <- decode.field(3, decode.int)
+  use created_at <- decode.field(4, timestamp_decoder())
+  use available_at <- decode.field(5, timestamp_decoder())
+  use succeeded_at <- decode.field(6, timestamp_decoder())
+  decode.success(jobs.SucceededJob(
+    id:,
+    name:,
+    payload:,
+    attempts:,
+    created_at: timestamp_to_erlang(created_at),
+    available_at: timestamp_to_erlang(available_at),
+    succeeded_at: timestamp_to_erlang(succeeded_at),
+  ))
 }
 
 @internal
-pub fn decode_succeeded_db_row(data: dynamic.Dynamic) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use created_at <- zero.field(4, timestamp_decoder())
-    use available_at <- zero.field(5, timestamp_decoder())
-    use succeeded_at <- zero.field(6, timestamp_decoder())
-    zero.success(jobs.SucceededJob(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at: timestamp_to_erlang(created_at),
-      available_at: timestamp_to_erlang(available_at),
-      succeeded_at: timestamp_to_erlang(succeeded_at),
-    ))
-  }
-
-  zero.run(data, decoder)
-}
-
-@internal
-pub fn decode_failed_db_row(data: dynamic.Dynamic) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use exception <- zero.field(4, zero.string)
-    use created_at <- zero.field(5, timestamp_decoder())
-    use available_at <- zero.field(6, timestamp_decoder())
-    use failed_at <- zero.field(7, timestamp_decoder())
-    zero.success(jobs.FailedJob(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      exception:,
-      created_at: timestamp_to_erlang(created_at),
-      available_at: timestamp_to_erlang(available_at),
-      failed_at: timestamp_to_erlang(failed_at),
-    ))
-  }
-
-  zero.run(data, decoder)
+pub fn decode_failed_db_row() {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use payload <- decode.field(2, decode.string)
+  use attempts <- decode.field(3, decode.int)
+  use exception <- decode.field(4, decode.string)
+  use created_at <- decode.field(5, timestamp_decoder())
+  use available_at <- decode.field(6, timestamp_decoder())
+  use failed_at <- decode.field(7, timestamp_decoder())
+  decode.success(jobs.FailedJob(
+    id:,
+    name:,
+    payload:,
+    attempts:,
+    exception:,
+    created_at: timestamp_to_erlang(created_at),
+    available_at: timestamp_to_erlang(available_at),
+    failed_at: timestamp_to_erlang(failed_at),
+  ))
 }
 
 // --- UTILS -------------------------------------------------------------------
 
 /// A decoder to decode `timestamp`s coming from a Postgres query.
 ///
-fn timestamp_decoder() {
-  use dynamic <- zero.then(zero.dynamic)
-  case pog.decode_timestamp(dynamic) {
-    Ok(timestamp) -> zero.success(timestamp)
-    Error(_) -> {
+fn timestamp_decoder() -> decode.Decoder(pog.Timestamp) {
+  use dynamic <- decode.then(decode.dynamic)
+
+  case decode.run(dynamic, pog.timestamp_decoder()) {
+    Ok(timestamp) -> decode.success(timestamp)
+    Error(_) -> decode.success({
       let date = pog.Date(0, 0, 0)
       let time = pog.Time(0, 0, 0, 0)
-      zero.failure(pog.Timestamp(date:, time:), "timestamp")
-    }
+
+      pog.Timestamp(date:, time:)
+    })
   }
 }
