@@ -3,13 +3,15 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/bg_jobs/)
 
 # TODO before version 1
+Feel free to contribute if you want to move the project forward. My time working
+on this is limited.
 - [ ] Generally improve documentation
 - [ ] Split db adapters to their own packages
   - To do this testing needs change since the tests depend on the sqlite adapter
 - [ ] In the monitor module, `release abandoned jobs` should run on an interval to
   handle the case where the down message is not received 
----
-# Other improvements
+
+### Other improvements
 - [ ] Mock time implementation to not have to sleep in tests
 
 # Docs are WIP right now
