@@ -2,6 +2,16 @@
 [![Package Version](https://img.shields.io/hexpm/v/bg_jobs)](https://hex.pm/packages/bg_jobs)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/bg_jobs/)
 
+# TODO before version 1
+- [ ] Generally improve documentation
+- [ ] Split db adapters to their own packages
+  - To do this testing needs change since the tests depend on the sqlite adapter
+- [ ] In the monitor module, `release abandoned jobs` should run on an interval to
+  handle the case where the down message is not received 
+---
+# Other improvements
+- [ ] Mock time implementation to not have to sleep in tests
+
 # Docs are WIP right now
 Most of it is correct but not complete, some parts are duplicated.
 
@@ -465,9 +475,3 @@ gleam run   # Run the project
 gleam test  # Run the tests
 just watch-test # Run tests in watch mode
 ```
-
-# TODO
-- [ ] Documentation
-- [ ] Split db adapters to their own packages
-  - Need to solve testing, since the tests depend on sqlite
-- [ ] Implement loop in monitor actor to cover the case where down message was not received
