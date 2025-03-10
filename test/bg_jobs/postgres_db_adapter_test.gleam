@@ -3,6 +3,7 @@ import bg_jobs/jobs
 import bg_jobs/postgres_db_adapter
 import envoy
 import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/int
 import gleam/list
@@ -56,7 +57,7 @@ pub fn enqueue_job_test() {
 
   let assert Ok(pog.Returned(count, jobs)) =
     pog.query("SELECT * FROM jobs;")
-    |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+    |> pog.returning(postgres_db_adapter.decode_enqueued_db_row())
     |> pog.execute(conn)
 
   count
@@ -94,7 +95,7 @@ pub fn claim_jobs_limit_test() {
 
   let assert Ok(pog.Returned(count, _jobs)) =
     pog.query("SELECT * FROM jobs;")
-    |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+    |> pog.returning(postgres_db_adapter.decode_enqueued_db_row())
     |> pog.execute(conn)
 
   count |> should.equal(2)
@@ -156,7 +157,7 @@ pub fn move_job_to_success_test() {
   |> should.be_ok
 
   pog.query("SELECT * FROM jobs;")
-  |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+  |> pog.returning(postgres_db_adapter.decode_enqueued_db_row())
   |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
@@ -165,7 +166,7 @@ pub fn move_job_to_success_test() {
   }
 
   pog.query("SELECT * FROM jobs_succeeded;")
-  |> pog.returning(postgres_db_adapter.decode_succeeded_db_row)
+  |> pog.returning(postgres_db_adapter.decode_succeeded_db_row())
   |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
@@ -201,7 +202,7 @@ pub fn move_job_to_failed_test() {
   |> should.be_ok
 
   pog.query("SELECT * FROM jobs")
-  |> pog.returning(postgres_db_adapter.decode_enqueued_db_row)
+  |> pog.returning(postgres_db_adapter.decode_enqueued_db_row())
   |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
@@ -210,7 +211,7 @@ pub fn move_job_to_failed_test() {
   }
 
   pog.query("SELECT * FROM jobs_failed")
-  |> pog.returning(postgres_db_adapter.decode_failed_db_row)
+  |> pog.returning(postgres_db_adapter.decode_failed_db_row())
   |> pog.execute(conn)
   |> should.be_ok()
   |> fn(returned) {
@@ -237,22 +238,22 @@ pub fn get_succeeded_jobs_test() {
   let assert Ok(_) =
     pog.query(
       "INSERT INTO jobs_succeeded (
-      id, 
-      name, 
-      payload, 
-      attempts, 
-      created_at, 
-      available_at, 
+      id,
+      name,
+      payload,
+      attempts,
+      created_at,
+      available_at,
       succeeded_at
     )
     VALUES (
-      'job_12345',                                 
-      'process_order',                             
-      '\"test-payload\"',       
-      3,                                           
-      '2024-09-29 10:30:00',                       
-      '2024-09-29 10:30:00',                        
-      '2024-09-29 11:00:00'                        
+      'job_12345',
+      'process_order',
+      '\"test-payload\"',
+      3,
+      '2024-09-29 10:30:00',
+      '2024-09-29 10:30:00',
+      '2024-09-29 11:00:00'
     );
     ",
     )
@@ -280,24 +281,24 @@ pub fn get_failed_jobs_test() {
   let assert Ok(_) =
     pog.query(
       "INSERT INTO jobs_failed (
-      id, 
-      name, 
-      payload, 
-      attempts, 
+      id,
+      name,
+      payload,
+      attempts,
       exception,
-      created_at, 
-      available_at, 
+      created_at,
+      available_at,
       failed_at
     )
     VALUES (
-      'job_12345',                                 
-      'process_order',                             
-      '\"test-payload\"',       
-      3,                                           
+      'job_12345',
+      'process_order',
+      '\"test-payload\"',
+      3,
       'Test exception',
-      '2024-09-29 10:30:00',                       
       '2024-09-29 10:30:00',
-      '2024-09-29 11:00:00'                        
+      '2024-09-29 10:30:00',
+      '2024-09-29 11:00:00'
     );
     ",
     )
@@ -355,10 +356,10 @@ WHERE table_schema = 'public'
 AND table_type = 'BASE TABLE';"
 
   pog.query(sql)
-  |> pog.returning(dynamic.decode1(
-    fn(str) { str },
-    dynamic.element(0, dynamic.string),
-  ))
+  |> pog.returning({
+    use str <- decode.field(0, decode.string)
+    decode.success(str)
+  })
   |> pog.execute(conn)
   |> should.be_ok
   |> fn(result) {
@@ -370,10 +371,10 @@ AND table_type = 'BASE TABLE';"
   let assert Ok(_) =
     postgres_db_adapter.migrate_down(conn)([logger_event_listener])
   pog.query(sql)
-  |> pog.returning(dynamic.decode1(
-    fn(str) { str },
-    dynamic.element(0, dynamic.string),
-  ))
+  |> pog.returning({
+    use str <- decode.field(0, decode.string)
+    decode.success(str)
+  })
   |> pog.execute(conn)
   |> should.be_ok
   |> should.equal(pog.Returned(0, []))
@@ -468,8 +469,8 @@ pub fn db_events_test() {
     |> list.first
     |> should.be_ok
 
-  // There is dynamic data that get's logged, so it's 
-  // hard to check the exact output. Checking the number of 
+  // There is dynamic data that get's logged, so it's
+  // hard to check the exact output. Checking the number of
   // lines logged should be enough for now.
   test_helpers.get_log(event_logger)
   |> list.length()
@@ -542,30 +543,30 @@ pub fn get_running_jobs_test() {
   let assert Ok(_) =
     pog.query(
       "INSERT INTO jobs (
-        id, 
-        name, 
-        payload, 
-        attempts, 
-        created_at, 
-        available_at, 
+        id,
+        name,
+        payload,
+        attempts,
+        created_at,
+        available_at,
         reserved_at,
         reserved_by
       )
       VALUES (
-        'job_12345',                                 
-        'process_order',                             
-        '\"test-payload\"',       
-        3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00',                        
-        '2024-09-29 11:00:00',                        
+        'job_12345',
+        'process_order',
+        '\"test-payload\"',
+        3,
+        '2024-09-29 10:30:00',
+        '2024-09-29 10:30:00',
+        '2024-09-29 11:00:00',
         'test_queue'
       ), (
-        'job_6789',                                 
-        'process_order',                             
-        '\"test-payload\"',       
-        3,                                           
-        '2024-09-29 10:30:00',                       
+        'job_6789',
+        'process_order',
+        '\"test-payload\"',
+        3,
+        '2024-09-29 10:30:00',
         '2024-09-29 10:30:00',
         NULL,
         NULL
@@ -597,20 +598,20 @@ pub fn get_enqueued_jobs_test() {
   let assert Ok(_) =
     pog.query(
       "INSERT INTO jobs (
-        id, 
-        name, 
-        payload, 
-        attempts, 
-        created_at, 
+        id,
+        name,
+        payload,
+        attempts,
+        created_at,
         available_at
       )
       VALUES (
-        'job_12345',                                 
-        'process_order',                             
-        '\"test-payload\"',       
-        3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00'                       
+        'job_12345',
+        'process_order',
+        '\"test-payload\"',
+        3,
+        '2024-09-29 10:30:00',
+        '2024-09-29 10:30:00'
       );
     ",
     )
