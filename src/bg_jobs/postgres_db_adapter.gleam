@@ -707,11 +707,12 @@ fn timestamp_decoder() -> decode.Decoder(pog.Timestamp) {
 
   case decode.run(dynamic, pog.timestamp_decoder()) {
     Ok(timestamp) -> decode.success(timestamp)
-    Error(_) -> decode.success({
-      let date = pog.Date(0, 0, 0)
-      let time = pog.Time(0, 0, 0, 0)
+    Error(_) ->
+      decode.success({
+        let date = pog.Date(0, 0, 0)
+        let time = pog.Time(0, 0, 0, 0)
 
-      pog.Timestamp(date:, time:)
-    })
+        pog.Timestamp(date:, time:)
+      })
   }
 }

@@ -37,18 +37,16 @@ pub fn release_jobs_reserved_by(db, arg_1) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      ReleaseJobsReservedByRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(ReleaseJobsReservedByRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "UPDATE
@@ -102,18 +100,16 @@ pub fn enqueue_job(db, arg_1, arg_2, arg_3, arg_4, arg_5) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      EnqueueJobRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(EnqueueJobRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "INSERT INTO
@@ -175,18 +171,16 @@ pub fn get_enqueued_jobs(db, arg_1) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      GetEnqueuedJobsRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(GetEnqueuedJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "SELECT
@@ -238,18 +232,16 @@ pub fn get_failed_jobs(db, arg_1) {
     use created_at <- decode.field(5, pog.timestamp_decoder())
     use available_at <- decode.field(6, pog.timestamp_decoder())
     use failed_at <- decode.field(7, pog.timestamp_decoder())
-    decode.success(
-      GetFailedJobsRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        exception:,
-        created_at:,
-        available_at:,
-        failed_at:,
-      ),
-    )
+    decode.success(GetFailedJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      exception:,
+      created_at:,
+      available_at:,
+      failed_at:,
+    ))
   }
 
   "SELECT
@@ -300,18 +292,16 @@ pub fn increment_attempts(db, arg_1) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      IncrementAttemptsRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(IncrementAttemptsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "UPDATE
@@ -364,18 +354,16 @@ pub fn get_running_jobs_by_queue_name(db, arg_1) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      GetRunningJobsByQueueNameRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(GetRunningJobsByQueueNameRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "SELECT
@@ -448,8 +436,7 @@ pub fn insert_failed_job(
   arg_7,
   arg_8,
 ) {
-  let decoder =
-  {
+  let decoder = {
     use id <- decode.field(0, decode.string)
     use name <- decode.field(1, decode.string)
     use payload <- decode.field(2, decode.string)
@@ -458,18 +445,16 @@ pub fn insert_failed_job(
     use created_at <- decode.field(5, pog.timestamp_decoder())
     use available_at <- decode.field(6, pog.timestamp_decoder())
     use failed_at <- decode.field(7, pog.timestamp_decoder())
-    decode.success(
-      InsertFailedJobRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        exception:,
-        created_at:,
-        available_at:,
-        failed_at:,
-      ),
-    )
+    decode.success(InsertFailedJobRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      exception:,
+      created_at:,
+      available_at:,
+      failed_at:,
+    ))
   }
 
   "INSERT INTO
@@ -536,18 +521,16 @@ pub fn release_reservation(db, arg_1) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      ReleaseReservationRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(ReleaseReservationRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "UPDATE
@@ -590,10 +573,8 @@ pub type InsertSucceededJobRow {
 /// > 🐿️ This function was generated automatically using v3.0.1 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7,
-) {
-  let decoder =
-  {
+pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7) {
+  let decoder = {
     use id <- decode.field(0, decode.string)
     use name <- decode.field(1, decode.string)
     use payload <- decode.field(2, decode.string)
@@ -601,17 +582,15 @@ pub fn insert_succeeded_job(db, arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7,
     use created_at <- decode.field(4, pog.timestamp_decoder())
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use succeeded_at <- decode.field(6, pog.timestamp_decoder())
-    decode.success(
-      InsertSucceededJobRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        succeeded_at:,
-      ),
-    )
+    decode.success(InsertSucceededJobRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      succeeded_at:,
+    ))
   }
 
   "INSERT INTO
@@ -674,17 +653,15 @@ pub fn get_succeeded_jobs(db, arg_1) {
     use created_at <- decode.field(4, pog.timestamp_decoder())
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use succeeded_at <- decode.field(6, pog.timestamp_decoder())
-    decode.success(
-      GetSucceededJobsRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        succeeded_at:,
-      ),
-    )
+    decode.success(GetSucceededJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      succeeded_at:,
+    ))
   }
 
   "SELECT
@@ -735,18 +712,16 @@ pub fn get_running_jobs(db) {
     use available_at <- decode.field(5, pog.timestamp_decoder())
     use reserved_at <- decode.field(6, decode.optional(pog.timestamp_decoder()))
     use reserved_by <- decode.field(7, decode.optional(decode.string))
-    decode.success(
-      GetRunningJobsRow(
-        id:,
-        name:,
-        payload:,
-        attempts:,
-        created_at:,
-        available_at:,
-        reserved_at:,
-        reserved_by:,
-      ),
-    )
+    decode.success(GetRunningJobsRow(
+      id:,
+      name:,
+      payload:,
+      attempts:,
+      created_at:,
+      available_at:,
+      reserved_at:,
+      reserved_by:,
+    ))
   }
 
   "SELECT
