@@ -89,7 +89,7 @@ pub fn schedule_test() {
       "SELECT * FROM JOBS",
       conn,
       [],
-      sqlite_db_adapter.decode_enqueued_db_row,
+      sqlite_db_adapter.decode_enqueued_db_row(),
     )
     |> should.be_ok
 
@@ -162,7 +162,7 @@ pub fn align_seconds_test() {
   scheduled_job.align_seconds(now, schedule)
   |> should.equal(naive_datetime.literal("2024-01-01T01:02:30.009"))
 
-  // Should return the same date 
+  // Should return the same date
   // since seconds is matching a range between 4 and 6
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -194,7 +194,7 @@ pub fn align_minutes_test() {
   scheduled_job.align_minutes(now, schedule)
   |> should.equal(naive_datetime.literal("2024-01-01T02:30:00.009"))
 
-  // Should return the same date 
+  // Should return the same date
   // since minute is matching a range between 4 and 6
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -225,7 +225,7 @@ pub fn align_hours_test() {
   scheduled_job.align_hours(now, schedule)
   |> should.equal(naive_datetime.literal("2024-01-02T04:01:00.009"))
 
-  // Should return the same date 
+  // Should return the same date
   // since hour is matching a range between 4 and 6
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -247,7 +247,7 @@ pub fn align_day_of_month_test() {
   |> scheduled_job.align_day(schedule)
   |> should.equal(naive_datetime.literal("2024-01-01T01:01:00.009"))
 
-  // Should have incremented days 
+  // Should have incremented days
   // since day_of_month matches specific 4
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -258,7 +258,7 @@ pub fn align_day_of_month_test() {
   |> scheduled_job.align_day(schedule)
   |> should.equal(naive_datetime.literal("2024-01-04T01:01:00.009"))
 
-  // Should have incremented days and month 
+  // Should have incremented days and month
   // since day_of_month is matching specific 4 and it's starting on the 5th
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -269,7 +269,7 @@ pub fn align_day_of_month_test() {
   |> scheduled_job.align_day(schedule)
   |> should.equal(naive_datetime.literal("2024-02-04T01:01:00.009"))
 
-  // Should return the same date 
+  // Should return the same date
   // since day_of_month is matching a range between 4 and 6
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -280,7 +280,7 @@ pub fn align_day_of_month_test() {
   |> scheduled_job.align_day(schedule)
   |> should.equal(naive_datetime.literal("2024-01-05T01:01:00.009"))
 
-  // Should have incremented days 
+  // Should have incremented days
   // since day_of_week is 4 and it's starting on a monday
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()
@@ -302,7 +302,7 @@ pub fn align_day_of_month_test() {
   |> scheduled_job.align_day(schedule)
   |> should.equal(naive_datetime.literal("2024-01-11T01:01:00.009"))
 
-  // Should return the same date 
+  // Should return the same date
   // since day_of_week is matching a range between 4 and 6
   let assert Ok(scheduled_job.Schedule(schedule)) =
     scheduled_job.new_schedule()

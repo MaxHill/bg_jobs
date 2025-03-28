@@ -3,8 +3,7 @@ import bg_jobs/errors
 import bg_jobs/events
 import bg_jobs/internal/utils
 import bg_jobs/jobs
-import decode/zero
-import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/result
@@ -15,7 +14,7 @@ import tempo/naive_datetime
 import youid/uuid
 
 /// Create a new sqlite_db_adapter
-/// 
+///
 pub fn new(conn: sqlight.Connection, event_listners: List(events.EventListener)) {
   let send_event = events.send_event(event_listners, _)
   db_adapter.DbAdapter(
@@ -45,7 +44,7 @@ fn query(
   sql: String,
   on connection: sqlight.Connection,
   with arguments: List(sqlight.Value),
-  expecting decoder: dynamic.Decoder(t),
+  expecting decoder: decode.Decoder(t),
 ) {
   let res =
     sqlight.query(sql, connection, arguments, decoder)
@@ -63,9 +62,9 @@ fn query(
   res
 }
 
-/// If a job succeeds within the retries, this function 
+/// If a job succeeds within the retries, this function
 /// will be called and move the job to the succeeded jobs table
-/// 
+///
 fn move_job_to_succeeded(
   conn: sqlight.Connection,
   send_event: events.EventListener,
@@ -78,7 +77,7 @@ fn move_job_to_succeeded(
          WHERE id =  ?;",
       conn,
       [sqlight.text(job.id)],
-      utils.discard_decode,
+      decode.success(Nil),
     ))
 
     use created_at <- result.try(utils.from_tuple(job.created_at))
@@ -88,12 +87,12 @@ fn move_job_to_succeeded(
       send_event,
       "
       INSERT INTO jobs_succeeded (
-        id, 
-        name, 
-        payload, 
-        attempts, 
-        created_at, 
-        available_at, 
+        id,
+        name,
+        payload,
+        attempts,
+        created_at,
+        available_at,
         succeeded_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -109,7 +108,7 @@ fn move_job_to_succeeded(
         sqlight.text(avaliable_at |> to_db_date()),
         sqlight.text(naive_datetime.now_utc() |> to_db_date()),
       ],
-      decode_succeeded_db_row,
+      decode_succeeded_db_row(),
     )
     |> result.replace(Nil)
   }
@@ -126,19 +125,19 @@ fn get_succeeded_jobs(
     query(
       send_event,
       "
-      SELECT * 
+      SELECT *
       FROM jobs_succeeded
       LIMIT ?;
     ",
       conn,
       [sqlight.int(limit)],
-      decode_succeeded_db_row,
+      decode_succeeded_db_row(),
     )
   }
 }
 
 /// Get all failed jobs.
-/// 
+///
 fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(limit: Int) {
     send_event(events.DbEvent("get_failed_jobs", [int.to_string(limit)]))
@@ -151,13 +150,13 @@ fn get_failed_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
     ",
       conn,
       [sqlight.int(limit)],
-      decode_failed_db_row,
+      decode_failed_db_row(),
     )
   }
 }
 
 /// Sets claimed_at and claimed_by and return the job to be processed.
-/// 
+///
 fn move_job_to_failed(
   conn: sqlight.Connection,
   send_event: events.EventListener,
@@ -175,7 +174,7 @@ fn move_job_to_failed(
       sql,
       conn,
       [sqlight.text(job.id)],
-      utils.discard_decode,
+      decode.success(Nil),
     ))
 
     use created_at <- result.try(utils.from_tuple(job.created_at))
@@ -184,13 +183,13 @@ fn move_job_to_failed(
     let sql =
       "
       INSERT INTO jobs_failed (
-        id, 
-        name, 
-        payload, 
-        attempts, 
+        id,
+        name,
+        payload,
+        attempts,
         exception,
-        created_at, 
-        available_at, 
+        created_at,
+        available_at,
         failed_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -211,14 +210,14 @@ fn move_job_to_failed(
         sqlight.text(avaliable_at |> to_db_date()),
         sqlight.text(naive_datetime.now_utc() |> to_db_date()),
       ],
-      decode_failed_db_row,
+      decode_failed_db_row(),
     )
     |> result.replace(Nil)
   }
 }
 
 /// Sets claimed_at and claimed_by and return the job to be processed.
-/// 
+///
 fn reserve_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
   fn(job_names: List(String), limit: Int, queue_id: String) {
     send_event(events.DbEvent("claim_jobs", [string.inspect(job_names)]))
@@ -239,9 +238,9 @@ fn reserve_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
           SELECT id
             FROM jobs
            WHERE name IN (" <> job_names_sql <> ")
-             AND available_at <= ?  
-             AND reserved_at IS NULL  
-        ORDER BY available_at ASC  
+             AND available_at <= ?
+             AND reserved_at IS NULL
+        ORDER BY available_at ASC
            LIMIT ?
       )
       RETURNING *;
@@ -253,7 +252,7 @@ fn reserve_jobs(conn: sqlight.Connection, send_event: events.EventListener) {
         [sqlight.text(now), sqlight.int(limit)],
       ])
 
-    query(send_event, sql, conn, arguments, decode_enqueued_db_row)
+    query(send_event, sql, conn, arguments, decode_enqueued_db_row())
   }
 }
 
@@ -269,11 +268,17 @@ fn release_reservation(
       "
         UPDATE jobs
            SET reserved_at = NULL, reserved_by = NULL
-         WHERE id = ? 
+         WHERE id = ?
      RETURNING *;
     "
 
-    query(send_event, sql, conn, [sqlight.text(job_id)], decode_enqueued_db_row)
+    query(
+      send_event,
+      sql,
+      conn,
+      [sqlight.text(job_id)],
+      decode_enqueued_db_row(),
+    )
     |> result.try(fn(list) {
       list.first(list)
       |> result.replace_error(errors.UnknownError(
@@ -295,7 +300,7 @@ fn release_jobs_reserved_by(
       "
         UPDATE jobs
            SET reserved_at = NULL, reserved_by = NULL
-         WHERE reserved_by = ? 
+         WHERE reserved_by = ?
      RETURNING *;
     "
 
@@ -304,7 +309,7 @@ fn release_jobs_reserved_by(
       sql,
       conn,
       [sqlight.text(reserved_by)],
-      decode_enqueued_db_row,
+      decode_enqueued_db_row(),
     )
   }
 }
@@ -325,7 +330,7 @@ fn get_running_jobs_by_queue_name(
         sqlight.text(naive_datetime.now_utc() |> to_db_date()),
         sqlight.text(queue_id),
       ],
-      decode_enqueued_db_row,
+      decode_enqueued_db_row(),
     )
   }
 }
@@ -340,7 +345,7 @@ fn get_enqueued_jobs(conn: sqlight.Connection, send_event: events.EventListener)
       "SELECT * FROM jobs WHERE name = ? AND reserved_at is NULL",
       conn,
       [sqlight.text(job_name)],
-      decode_enqueued_db_row,
+      decode_enqueued_db_row(),
     )
   }
 }
@@ -355,7 +360,7 @@ fn get_running_jobs(conn: sqlight.Connection, send_event: events.EventListener) 
       "SELECT * FROM jobs WHERE reserved_at IS NOT NULL",
       conn,
       [],
-      decode_enqueued_db_row,
+      decode_enqueued_db_row(),
     )
   }
 }
@@ -378,7 +383,7 @@ fn increment_attempts(
   ",
       conn,
       [sqlight.text(job.id)],
-      decode_enqueued_db_row,
+      decode_enqueued_db_row(),
     )
     |> result.try(fn(list) {
       list.first(list)
@@ -407,11 +412,11 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
     let sql =
       "
       INSERT INTO jobs (
-        id, 
-        name, 
-        payload, 
-        attempts, 
-        created_at, 
+        id,
+        name,
+        payload,
+        attempts,
+        created_at,
         available_at)
       VALUES (?, ?, ?, 0, ?, ?)
       RETURNING *;
@@ -428,7 +433,7 @@ fn enqueue_job(conn: sqlight.Connection, send_event: events.EventListener) {
         sqlight.text(naive_datetime.now_utc() |> to_db_date()),
         sqlight.text(available_at_string),
       ],
-      decode_enqueued_db_row,
+      decode_enqueued_db_row(),
     )
     |> result.try(fn(list) {
       list.first(list)
@@ -447,7 +452,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
     CREATE TABLE IF NOT EXISTS jobs (
       id VARCHAR PRIMARY KEY NOT NULL,
       name VARCHAR NOT NULL,
-      payload TEXT NOT NULL, 
+      payload TEXT NOT NULL,
       attempts INTEGER NOT NULL,
       created_at DATETIME NOT NULL,
       available_at DATETIME NOT NULL,
@@ -458,7 +463,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
     CREATE TABLE IF NOT EXISTS jobs_failed (
       id VARCHAR PRIMARY KEY NOT NULL,
       name VARCHAR NOT NULL,
-      payload TEXT NOT NULL, 
+      payload TEXT NOT NULL,
       attempts INTEGER NOT NULL,
       exception VARCHAR NOT NULL,
       created_at DATETIME NOT NULL,
@@ -469,7 +474,7 @@ pub fn migrate_up(conn: sqlight.Connection) {
     CREATE TABLE IF NOT EXISTS jobs_succeeded (
       id VARCHAR PRIMARY KEY NOT NULL,
       name VARCHAR NOT NULL,
-      payload TEXT NOT NULL, 
+      payload TEXT NOT NULL,
       attempts INTEGER NOT NULL,
       created_at DATETIME NOT NULL,
       available_at DATETIME NOT NULL,
@@ -507,85 +512,68 @@ pub fn migrate_down(conn: sqlight.Connection) {
 //---------------
 
 @internal
-pub fn decode_enqueued_db_row(
-  dynamic: dynamic.Dynamic,
-) -> Result(jobs.Job, List(dynamic.DecodeError)) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use created_at <- zero.field(4, timestamp_decoder())
-    use available_at <- zero.field(5, timestamp_decoder())
-    use reserved_at <- zero.field(6, zero.optional(timestamp_decoder()))
-    use reserved_by <- zero.field(7, zero.optional(zero.string))
-    zero.success(jobs.Job(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      reserved_at:,
-      reserved_by:,
-    ))
-  }
-  zero.run(dynamic, decoder)
+pub fn decode_enqueued_db_row() -> decode.Decoder(jobs.Job) {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use payload <- decode.field(2, decode.string)
+  use attempts <- decode.field(3, decode.int)
+  use created_at <- decode.field(4, timestamp_decoder())
+  use available_at <- decode.field(5, timestamp_decoder())
+  use reserved_at <- decode.field(6, decode.optional(timestamp_decoder()))
+  use reserved_by <- decode.field(7, decode.optional(decode.string))
+  decode.success(jobs.Job(
+    id:,
+    name:,
+    payload:,
+    attempts:,
+    created_at:,
+    available_at:,
+    reserved_at:,
+    reserved_by:,
+  ))
 }
 
 @internal
-pub fn decode_succeeded_db_row(
-  dynamic: dynamic.Dynamic,
-) -> Result(jobs.SucceededJob, List(dynamic.DecodeError)) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use created_at <- zero.field(4, timestamp_decoder())
-    use available_at <- zero.field(5, timestamp_decoder())
-    use succeeded_at <- zero.field(6, timestamp_decoder())
-    zero.success(jobs.SucceededJob(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      created_at:,
-      available_at:,
-      succeeded_at:,
-    ))
-  }
-
-  zero.run(dynamic, decoder)
+pub fn decode_succeeded_db_row() -> decode.Decoder(jobs.SucceededJob) {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use payload <- decode.field(2, decode.string)
+  use attempts <- decode.field(3, decode.int)
+  use created_at <- decode.field(4, timestamp_decoder())
+  use available_at <- decode.field(5, timestamp_decoder())
+  use succeeded_at <- decode.field(6, timestamp_decoder())
+  decode.success(jobs.SucceededJob(
+    id:,
+    name:,
+    payload:,
+    attempts:,
+    created_at:,
+    available_at:,
+    succeeded_at:,
+  ))
 }
 
 @internal
-pub fn decode_failed_db_row(
-  dynamic: dynamic.Dynamic,
-) -> Result(jobs.FailedJob, List(dynamic.DecodeError)) {
-  let decoder = {
-    use id <- zero.field(0, zero.string)
-    use name <- zero.field(1, zero.string)
-    use payload <- zero.field(2, zero.string)
-    use attempts <- zero.field(3, zero.int)
-    use exception <- zero.field(4, zero.string)
-    use created_at <- zero.field(5, timestamp_decoder())
-    use available_at <- zero.field(6, timestamp_decoder())
-    use failed_at <- zero.field(7, timestamp_decoder())
+pub fn decode_failed_db_row() -> decode.Decoder(jobs.FailedJob) {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use payload <- decode.field(2, decode.string)
+  use attempts <- decode.field(3, decode.int)
+  use exception <- decode.field(4, decode.string)
+  use created_at <- decode.field(5, timestamp_decoder())
+  use available_at <- decode.field(6, timestamp_decoder())
+  use failed_at <- decode.field(7, timestamp_decoder())
 
-    zero.success(jobs.FailedJob(
-      id:,
-      name:,
-      payload:,
-      attempts:,
-      exception:,
-      created_at:,
-      available_at:,
-      failed_at:,
-    ))
-  }
-
-  zero.run(dynamic, decoder)
+  decode.success(jobs.FailedJob(
+    id:,
+    name:,
+    payload:,
+    attempts:,
+    exception:,
+    created_at:,
+    available_at:,
+    failed_at:,
+  ))
 }
 
 @internal
@@ -595,11 +583,11 @@ pub fn to_db_date(date: tempo.NaiveDateTime) -> String {
 }
 
 fn timestamp_decoder() {
-  use str <- zero.then(zero.string)
+  use str <- decode.then(decode.string)
   case naive_datetime.parse(str, "YYYY-MM-DD HH:mm:ss") {
-    Ok(timestamp) -> zero.success(timestamp |> naive_datetime.to_tuple)
+    Ok(timestamp) -> decode.success(timestamp |> naive_datetime.to_tuple)
     Error(_) -> {
-      zero.failure(#(#(0, 0, 0), #(0, 0, 0)), "timestamp")
+      decode.failure(#(#(0, 0, 0), #(0, 0, 0)), "timestamp")
     }
   }
 }

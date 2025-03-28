@@ -33,7 +33,7 @@ packages = [
   { name = "pog", version = "3.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "pgo"], otp_app = "pog", source = "hex", outer_checksum = "63152DADEBAE3150C81E9612909974C3C38F3E35B41F252798069A2FD117308E" },
   { name = "pprint", version = "1.0.4", build_tools = ["gleam"], requirements = ["glam", "gleam_stdlib"], otp_app = "pprint", source = "hex", outer_checksum = "C310A98BDC0995644847C3C8702DE19656D6BCD638B2A8A358B97824379ECAA1" },
   { name = "simplifile", version = "2.2.1", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "C88E0EE2D509F6D86EB55161D631657675AA7684DAB83822F7E59EB93D9A60E3" },
-  { name = "sqlight", version = "0.9.1", build_tools = ["gleam"], requirements = ["esqlite", "gleam_stdlib"], otp_app = "sqlight", source = "hex", outer_checksum = "A495F2892627B2268CCBCC5107EDC1E1AD9547D5F4F21A5DB04CEA72B8931B00" },
+  { name = "sqlight", version = "1.0.1", build_tools = ["gleam"], requirements = ["esqlite", "gleam_stdlib"], otp_app = "sqlight", source = "hex", outer_checksum = "5435662352757841F9395C933404A223F39F73C73C4EC5E4418A7CB8AE85CDE6" },
   { name = "squirrel", version = "3.0.1", build_tools = ["gleam"], requirements = ["argv", "envoy", "eval", "filepath", "glam", "gleam_community_ansi", "gleam_crypto", "gleam_json", "gleam_regexp", "gleam_stdlib", "glexer", "justin", "mug", "non_empty_list", "pog", "simplifile", "term_size", "tom", "tote", "youid"], otp_app = "squirrel", source = "hex", outer_checksum = "B0059A5C86E57D055B64F7591366117E2CF5EBD686BBA9470A1387D81A517DCB" },
   { name = "term_size", version = "1.0.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "term_size", source = "hex", outer_checksum = "D00BD2BC8FB3EBB7E6AE076F3F1FF2AC9D5ED1805F004D0896C784D06C6645F1" },
   { name = "tom", version = "1.1.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "tom", source = "hex", outer_checksum = "0910EE688A713994515ACAF1F486A4F05752E585B9E3209D8F35A85B234C2719" },
@@ -54,6 +54,6 @@ lamb = { version = ">= 0.5.0 and < 1.0.0" }
 logging = { version = ">= 1.3.0 and < 2.0.0" }
 pog = { version = ">= 3.0.0 and < 4.0.0" }
 pprint = { version = ">= 1.0.3 and < 2.0.0" }
-sqlight = { version = ">= 0.9.1 and < 1.0.0" }
+sqlight = { version = ">= 1.0.1 and < 2.0.0" }
 squirrel = { version = ">= 3.0.1 and < 4.0.0" }
 youid = { version = ">= 1.2.0 and < 2.0.0" }
