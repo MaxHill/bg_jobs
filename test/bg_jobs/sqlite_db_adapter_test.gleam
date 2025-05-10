@@ -1,7 +1,7 @@
 import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/sqlite_db_adapter
-import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/list
 import gleam/option
@@ -34,7 +34,7 @@ pub fn enqueue_job_test() {
       "SELECT * FROM jobs",
       conn,
       [],
-      sqlite_db_adapter.decode_enqueued_db_row,
+      sqlite_db_adapter.decode_enqueued_db_row(),
     )
 
   list.length(jobs)
@@ -76,7 +76,7 @@ pub fn claim_jobs_limit_test() {
     "select * from jobs",
     conn,
     [],
-    sqlite_db_adapter.decode_enqueued_db_row,
+    sqlite_db_adapter.decode_enqueued_db_row(),
   )
   |> should.be_ok
   |> list.length
@@ -147,7 +147,7 @@ pub fn move_job_to_success_test() {
     "SELECT * FROM jobs",
     conn,
     [],
-    sqlite_db_adapter.decode_enqueued_db_row,
+    sqlite_db_adapter.decode_enqueued_db_row(),
   )
   |> should.be_ok()
   |> list.length
@@ -157,7 +157,7 @@ pub fn move_job_to_success_test() {
     "SELECT * FROM jobs_succeeded",
     conn,
     [],
-    sqlite_db_adapter.decode_succeeded_db_row,
+    sqlite_db_adapter.decode_succeeded_db_row(),
   )
   |> should.be_ok()
   |> list.first
@@ -193,7 +193,7 @@ pub fn move_job_to_failed_test() {
     "SELECT * FROM jobs",
     conn,
     [],
-    sqlite_db_adapter.decode_enqueued_db_row,
+    sqlite_db_adapter.decode_enqueued_db_row(),
   )
   |> should.be_ok()
   |> list.length
@@ -203,7 +203,7 @@ pub fn move_job_to_failed_test() {
     "SELECT * FROM jobs_failed",
     conn,
     [],
-    sqlite_db_adapter.decode_failed_db_row,
+    sqlite_db_adapter.decode_failed_db_row(),
   )
   |> should.be_ok()
   |> list.first
@@ -229,22 +229,22 @@ pub fn get_succeeded_jobs_test() {
   let assert Ok(_) =
     sqlight.exec(
       "INSERT INTO jobs_succeeded (
-      id, 
-      name, 
-      payload, 
-      attempts, 
-      created_at, 
-      available_at, 
+      id,
+      name,
+      payload,
+      attempts,
+      created_at,
+      available_at,
       succeeded_at
     )
     VALUES (
-      'job_12345',                                 
-      'process_order',                             
-      '\"test-payload\"',       
-      3,                                           
-      '2024-09-29 10:30:00',                       
-      '2024-09-29 10:30:00',                        
-      '2024-09-29 11:00:00'                        
+      'job_12345',
+      'process_order',
+      '\"test-payload\"',
+      3,
+      '2024-09-29 10:30:00',
+      '2024-09-29 10:30:00',
+      '2024-09-29 11:00:00'
     );
     ",
       conn,
@@ -274,24 +274,24 @@ pub fn get_failed_jobs_test() {
   let assert Ok(_) =
     sqlight.exec(
       "INSERT INTO jobs_failed (
-      id, 
-      name, 
-      payload, 
-      attempts, 
+      id,
+      name,
+      payload,
+      attempts,
       exception,
-      created_at, 
-      available_at, 
+      created_at,
+      available_at,
       failed_at
     )
     VALUES (
-      'job_12345',                                 
-      'process_order',                             
-      '\"test-payload\"',       
-      3,                                           
+      'job_12345',
+      'process_order',
+      '\"test-payload\"',
+      3,
       'Test exception',
-      '2024-09-29 10:30:00',                       
       '2024-09-29 10:30:00',
-      '2024-09-30 11:00:00'                        
+      '2024-09-29 10:30:00',
+      '2024-09-30 11:00:00'
     );
     ",
       conn,
@@ -344,27 +344,17 @@ pub fn migrate_test() {
 
   let sql =
     "
-    SELECT name 
-    FROM sqlite_master 
+    SELECT name
+    FROM sqlite_master
     WHERE type = 'table';"
 
-  sqlight.query(
-    sql,
-    conn,
-    [],
-    dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
-  )
+  sqlight.query(sql, conn, [], decode.field(0, decode.string, decode.success))
   |> should.be_ok
   |> should.equal(["jobs", "jobs_failed", "jobs_succeeded"])
 
   let assert Ok(_) =
     sqlite_db_adapter.migrate_down(conn)([logger_event_listener])
-  sqlight.query(
-    sql,
-    conn,
-    [],
-    dynamic.decode1(fn(str) { str }, dynamic.element(0, dynamic.string)),
-  )
+  sqlight.query(sql, conn, [], decode.field(0, decode.string, decode.success))
   |> should.be_ok
   |> should.equal([])
 
@@ -464,8 +454,8 @@ pub fn db_events_test() {
     |> list.first
     |> should.be_ok
 
-  // There is dynamic data that get's logged, so it's 
-  // hard to check the exact output. Checking the number of 
+  // There is dynamic data that get's logged, so it's
+  // hard to check the exact output. Checking the number of
   // lines logged should be enough for now.
   test_helpers.get_log(event_logger)
   |> list.length()
@@ -496,7 +486,7 @@ pub fn release_claim_test() {
         sqlight.text(naive_datetime.now_utc() |> sqlite_db_adapter.to_db_date()),
         sqlight.text("default_queue"),
       ],
-      utils.discard_decode,
+      decode.success(Nil),
     )
 
   job_store.release_reservation("test_id")
@@ -549,30 +539,30 @@ pub fn get_running_jobs_test() {
   let assert Ok(_) =
     sqlight.exec(
       "INSERT INTO jobs (
-        id, 
-        name, 
-        payload, 
-        attempts, 
-        created_at, 
-        available_at, 
+        id,
+        name,
+        payload,
+        attempts,
+        created_at,
+        available_at,
         reserved_at,
         reserved_by
       )
       VALUES (
-        'job_12345',                                 
-        'process_order',                             
-        '\"test-payload\"',       
-        3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00',                        
-        '2024-09-29 11:00:00',                        
+        'job_12345',
+        'process_order',
+        '\"test-payload\"',
+        3,
+        '2024-09-29 10:30:00',
+        '2024-09-29 10:30:00',
+        '2024-09-29 11:00:00',
         'test_queue'
       ), (
-        'job_6789',                                 
-        'process_order',                             
-        '\"test-payload\"',       
-        3,                                           
-        '2024-09-29 10:30:00',                       
+        'job_6789',
+        'process_order',
+        '\"test-payload\"',
+        3,
+        '2024-09-29 10:30:00',
         '2024-09-29 10:30:00',
         NULL,
         NULL
@@ -606,20 +596,20 @@ pub fn get_enqueued_jobs_test() {
   let assert Ok(_) =
     sqlight.exec(
       "INSERT INTO jobs (
-        id, 
-        name, 
-        payload, 
-        attempts, 
-        created_at, 
+        id,
+        name,
+        payload,
+        attempts,
+        created_at,
         available_at
       )
       VALUES (
-        'job_12345',                                 
-        'process_order',                             
-        '\"test-payload\"',       
-        3,                                           
-        '2024-09-29 10:30:00',                       
-        '2024-09-29 10:30:00'                       
+        'job_12345',
+        'process_order',
+        '\"test-payload\"',
+        3,
+        '2024-09-29 10:30:00',
+        '2024-09-29 10:30:00'
       );
     ",
       conn,

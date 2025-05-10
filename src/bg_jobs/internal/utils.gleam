@@ -1,7 +1,6 @@
 import bg_jobs/errors
 import bg_jobs/internal/bg_jobs_ffi
 import decode
-import gleam/dynamic
 import gleam/erlang/process
 import gleam/option
 import gleam/result
@@ -35,10 +34,6 @@ pub fn transpose_option_to_result(
     option.Some(Ok(a)) -> Ok(option.Some(a))
     option.Some(Error(err)) -> Error(err)
   }
-}
-
-pub fn discard_decode(_: dynamic.Dynamic) {
-  Ok(Nil)
 }
 
 pub fn from_tuple(erl_date: #(#(Int, Int, Int), #(Int, Int, Int))) {

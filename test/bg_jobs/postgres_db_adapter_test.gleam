@@ -2,7 +2,6 @@ import bg_jobs/internal/utils
 import bg_jobs/jobs
 import bg_jobs/postgres_db_adapter
 import envoy
-import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/int
