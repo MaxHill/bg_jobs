@@ -46,11 +46,13 @@ pub fn job_is_moved_to_success_after_succeeding_test() {
   process.sleep(50)
 
   db_adapter.get_succeeded_jobs(10)
-  |> result.map(list.map(_, fn(job: jobs.SucceededJob) {
-    #(job.name, job.payload, job.attempts)
-  }))
+  |> result.map(
+    list.map(_, fn(job: jobs.SucceededJob) {
+      #(job.name, job.payload, job.attempts)
+    }),
+  )
   |> should.be_ok
-  |> should.equal([#("LOG_JOB", "\"test message 1\"", 0)])
+  |> should.equal([#("LOG_JOB", "{\"message\":\"test message 1\"}", 0)])
 }
 
 pub fn process_muliptle_jobs_test() {

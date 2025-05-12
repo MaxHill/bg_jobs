@@ -164,7 +164,7 @@ fn get_succeeded_jobs(conn: pog.Connection, send_event: events.EventListener) {
       send_event(events.DbResponseEvent(string.inspect(res)))
       res
     })
-    |> result.map_error(string.inspect(_))
+    |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
     |> result.map_error(fn(err) {
       send_event(events.DbErrorEvent(err))
@@ -200,7 +200,7 @@ fn get_failed_jobs(conn: pog.Connection, send_event: events.EventListener) {
       send_event(events.DbResponseEvent(string.inspect(res)))
       res
     })
-    |> result.map_error(string.inspect(_))
+    |> result.map_error(string.inspect)
     |> result.map_error(errors.DbError)
     |> result.map_error(fn(err) {
       send_event(events.DbErrorEvent(err))

@@ -127,7 +127,7 @@ pub fn release_claimed_jobs_on_process_down_interval_test() {
   })
 
   // Kill the queue again, this should trigger the cleanup again
-  let assert monitor.MonitorScheduledJob(_, _, subject, _) = scheduled_job
+  let monitor.MonitorScheduledJob(_, _, subject, _) = scheduled_job
   process.send(subject, scheduled_jobs_messages.Shutdown)
   process.kill(scheduled_job.pid)
 

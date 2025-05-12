@@ -1,16 +1,25 @@
 import bg_jobs
 import bg_jobs/jobs
-import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/int
 import gleam/json
-import gleam/result
 import test_helpers
 
 pub const job_name = "FAILING_JOB"
 
 pub type Payload {
   FailingPayload(message: String)
+}
+
+fn encode_payload(payload: Payload) -> json.Json {
+  let FailingPayload(message:) = payload
+  json.object([#("message", json.string(message))])
+}
+
+fn payload_decoder() -> decode.Decoder(Payload) {
+  use message <- decode.field("message", decode.string)
+  decode.success(FailingPayload(message:))
 }
 
 pub fn worker(logger: process.Subject(test_helpers.LogMessage)) {
@@ -36,11 +45,10 @@ pub fn dispatch(bg: bg_jobs.BgJobs, payload: Payload) {
 
 // Private methods
 pub fn to_string(log_payload: Payload) {
-  json.string(log_payload.message)
+  encode_payload(log_payload)
   |> json.to_string
 }
 
 fn from_string(json_string: String) -> Result(Payload, json.DecodeError) {
-  json.decode(from: json_string, using: dynamic.string)
-  |> result.map(FailingPayload)
+  json.parse(from: json_string, using: payload_decoder())
 }

@@ -1,6 +1,6 @@
 name = "bg_jobs"
-version = "0.5.2"
-gleam = ">= 1.6.0"
+version = "0.5.3"
+gleam = ">= 1.9.0"
 
 description = "Background job processing for your Gleam app"
 licences = ["Apache-2.0"]
